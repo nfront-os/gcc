@@ -1,0 +1,7 @@
+# name	url	(sha256 is filled in by fetch.sh -u on first download)
+gcc	https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz
+binutils	https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz
+gmp	https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+mpfr	https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz
+mpc	https://ftp.gnu.org/gnu/mpc/mpc-1.4.1.tar.xz
+autoconf	https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz

@@ -1,0 +1,68 @@
+diff --git a/bfd/config.bfd b/bfd/config.bfd
+index 02a1a685..3fd65c7d 100644
+--- a/bfd/config.bfd
++++ b/bfd/config.bfd
+@@ -558,7 +558,7 @@ case "${targ}" in
+     targ_selvecs="i386_elf32_vec i386_coff_vec"
+     targ_archs="$targ_archs bfd_iamcu_arch"
+     ;;
+-  i[3-7]86-*-elf* | i[3-7]86-*-genode* | i[3-7]86-*-nto* | i[3-7]86-*-rtems* | i[3-7]86-*-rdos*)
++  i[3-7]86-*-elf* | i[3-7]86-*-genode* | i[3-7]86-*-nto* | i[3-7]86-*-rtems* | i[3-7]86-*-rdos* | i[3-7]86-*-plan9*)
+     targ_defvec=i386_elf32_vec
+     targ_selvecs="i386_coff_vec"
+     ;;
+@@ -1381,7 +1381,7 @@ case "${targ}" in
+     targ_selvecs="i386_elf32_sol2_vec x86_64_elf64_vec i386_elf32_vec"
+     want64=true
+     ;;
+-  x86_64-*-elf* | x86_64-*-fuchsia | x86_64-*-genode* | x86_64-*-gnu*)
++  x86_64-*-elf* | x86_64-*-fuchsia | x86_64-*-genode* | x86_64-*-gnu* | x86_64-*-plan9*)
+     targ_defvec=x86_64_elf64_vec
+     targ_selvecs="i386_elf32_vec x86_64_elf32_vec"
+     want64=true
+diff --git a/gas/configure.tgt b/gas/configure.tgt
+index 7a5645fd..51c281b9 100644
+--- a/gas/configure.tgt
++++ b/gas/configure.tgt
+@@ -229,6 +229,7 @@ case ${generic_target} in
+   i386-*-beos*)				fmt=elf ;;
+   i386-*-elfiamcu)			fmt=elf arch=iamcu ;;
+   i386-*-elf*)				fmt=elf ;;
++  i386-*-plan9*)				fmt=elf ;;
+   i386-*-fuchsia*)			fmt=elf ;;
+   i386-*-haiku*)			fmt=elf em=haiku ;;
+   i386-*-genode*)			fmt=elf ;;
+diff --git a/ld/configure.tgt b/ld/configure.tgt
+index 60b62e69..a9dccd6a 100644
+--- a/ld/configure.tgt
++++ b/ld/configure.tgt
+@@ -379,7 +379,7 @@ i[3-6]86-*-phoenix*)
+ i[3-7]86-*-elfiamcu)	targ_emul=elf_iamcu
+ 			targ_extra_emuls=elf_i386
+ 			;;
+-i[3-7]86-*-elf* | i[3-7]86-*-rtems* | i[3-7]86-*-genode*)
++i[3-7]86-*-elf* | i[3-7]86-*-rtems* | i[3-7]86-*-genode* | i[3-7]86-*-plan9*)
+ 			targ_emul=elf_i386
+ 			;;
+ i[3-7]86-*-dragonfly*)	targ_emul=elf_i386
+@@ -964,7 +964,7 @@ x86_64-*-netbsd* | x86_64-*-openbsd*)
+ 			tdir_elf_i386=`echo ${targ_alias} | \
+ 			    sed -e 's/x86_64/i386/' -e 's/aout//'`
+ 			;;
+-x86_64-*-elf* | x86_64-*-rtems* | x86_64-*-fuchsia* | x86_64-*-genode*)
++x86_64-*-elf* | x86_64-*-rtems* | x86_64-*-fuchsia* | x86_64-*-genode* | x86_64-*-plan9*)
+ 			targ_emul=elf_x86_64
+ 			targ_extra_libpath="elf_i386 elf32_x86_64"
+ 			tdir_elf_i386=`echo ${targ_alias} | sed -e 's/x86_64/i386/'`
+diff --git a/libiberty/lrealpath.c b/libiberty/lrealpath.c
+index ce228dbb..60031295 100644
+--- a/libiberty/lrealpath.c
++++ b/libiberty/lrealpath.c
+@@ -303,4 +303,7 @@ lrealpath (const char *filename)
+     return res;
+   }
+ #endif // _WIN32
++
++  /* No way to canonicalize: the name as it is.  */
++  return strdup (filename);
+ }
