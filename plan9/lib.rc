@@ -1,0 +1,90 @@
+# Shared by the mk wrappers (gcc-cc, gcc-as, gcc-ld, pcc, ar): the native
+# gcc and binutils with the flags of the 9front tree's build (build.sh
+# plan9 writes them from $PLAN9/$objtype/*.json into this directory, one
+# argument per line: cflags, apeflags, asflags, ldflags, libs, apelibs).
+G=/$objtype/gnu
+P=$G/plan9
+GNU=$G/bin
+prog=`{basename $0}
+fn die{
+	echo $prog: $* >[1=2]
+	exit $prog
+}
+switch($objtype){
+case amd64
+	O=6
+case 386
+	O=8
+case *
+	die objtype $objtype: no gcc
+}
+nl='
+'
+ifs=$nl {
+	cflags=`{cat $P/cflags}
+	apeflags=`{cat $P/apeflags}
+	asflags=`{cat $P/asflags}
+	ldflags=`{cat $P/ldflags}
+	libs=`{cat $P/libs}
+	apelibs=`{cat $P/apelibs}
+}
+TMP=/tmp/gcc.$prog.$pid
+fn sigexit{
+	rm -rf $TMP
+}
+
+# ccargs args...: kencc's (6c, pcc) arguments sorted into $out (-o),
+# $defs (-D, -I, -U) and $files; the other options (-FTVw, -N, ...) are
+# kencc's own and mean nothing to gcc
+fn ccargs{
+	out=()
+	defs=()
+	files=()
+	while(! ~ $#* 0){
+		switch($1){
+		case -o
+			out=$2
+			shift
+		case -D -I -U
+			defs=($defs $1$2)
+			shift
+		case -D* -I* -U*
+			defs=($defs $1)
+		case -a* -S
+			die $1: not with gcc
+		case -*
+			;
+		case *
+			files=($files $1)
+		}
+		shift
+	}
+}
+
+# link out objects...: as the build tool links a program (sys/src/cmd/
+# build: presolve, link): the objects into one relocatable object whose
+# common symbols are weak definitions (8l takes a library member only
+# for undefined symbols), then with every library in one group (gcc
+# ignores the headers' #pragma lib) -- $libs, or $apelibs for pcc
+fn link{
+	lout=$1
+	shift
+	lobjs=()
+	larch=()
+	for(f){
+		switch($f){
+		case *.a *.a$O
+			larch=($larch $f)
+		case *
+			lobjs=($lobjs $f)
+		}
+	}
+	~ $#lobjs 0 && die $lout: no objects
+	mkdir -p $TMP
+	$GNU/ld -r -d -o $TMP/r.o $lobjs || die ld -r $lout
+	$GNU/nm -P $lobjs | awk '$2 == "C" { print $1 }' >$TMP/weak
+	if(test -s $TMP/weak)
+		$GNU/objcopy '--weaken-symbols='$TMP/weak $TMP/r.o || die objcopy $lout
+	$GNU/ld -o $lout $TMP/r.o -L/$objtype/lib.gcc --start-group $larch $linklibs --end-group \
+		$ldflags || die ld $lout
+}

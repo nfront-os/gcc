@@ -1,0 +1,15 @@
+#!/bin/rc
+# gcc-as: 6a (8a) for mk -- x.s to x.$O through its GAS port x.S beside
+# it (9front's .s is 6a syntax), as the build tool assembles; for gccmk
+. /$objtype/gnu/plan9/lib.rc
+ccargs $*
+~ $#files 0 && die no files
+~ $#out 0 || ~ $#files 1 || die -o with several files
+for(f in $files){
+	S=`{echo $f | sed 's/\.s$/.S/'}
+	test -r $S || die $f: no GAS port $S
+	o=$out
+	~ $#o 0 && o=`{basename $f .s}^.$O
+	$GNU/gcc -c -I/$objtype/include -I/sys/include -I. $asflags $defs -o $o $S || exit $prog
+}
+exit ''

@@ -6,6 +6,7 @@
 #   compat    the toolchain's additions to APE (compat/) into build/$objtype/cross
 #   hostlibs  gmp, mpfr, mpc for 9front            -> build/$objtype/hostlibs
 #   native    binutils and gcc that run on 9front  -> out/$objtype
+#   plan9     gccmk: mk with gcc on 9front (plan9/) -> out/$objtype
 #
 # objtype=amd64 (default): x86_64-pc-plan9; objtype=386: i686-pc-plan9.
 # usage: [objtype=386] build.sh stage...    (PLAN9: the 9front tree, default ../9front)
@@ -147,13 +148,58 @@ native(){
 	compat "$OUT/$objtype/gnu/$TARGET"
 }
 
-[ $# -gt 0 ] || { sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 1; }
+# gccmk and its wrappers (plan9/) into /$objtype/gnu: mk on 9front with
+# the native gcc, with the flags of the tree's build ($PLAN9/$objtype/
+# cflags.json, gcc.json, ape.json; the libraries a program manifest
+# links), one argument per line for the wrappers' lib.rc
+plan9(){
+	local d=$OUT/$objtype/gnu/plan9 O
+	case $objtype in amd64) O=6 ;; 386) O=8 ;; esac
+	log "gccmk"
+	rm -rf "$d"
+	mkdir -p "$d/bin" "$OUT/$objtype/gnu/bin"
+	cp "$TOP"/plan9/lib.rc "$d/"
+	cp "$TOP"/plan9/bin/* "$d/bin/"
+	cp "$TOP"/plan9/gccmk "$OUT/$objtype/gnu/bin/"
+	printf '</sys/src/mkfile.proto\n\nCC=gcc-cc\nLD=gcc-ld\nO=%s\nAS=gcc-as\n' $O > "$d/mkfile"
+	python3 - "$PLAN9" "$objtype" "$d" <<'PY'
+import json, os, sys
+root, objtype, d = sys.argv[1:]
+def flags(name, key):
+	out = []
+	for e in json.load(open(os.path.join(root, objtype, name))):
+		out += e.get(key, [])
+	return [f.replace('/$ARCH', '/' + objtype) for f in out]
+def libs(manifest):
+	e = json.load(open(os.path.join(root, manifest)))[0]
+	return [f.replace('/$ARCH', '/' + objtype) for f in e['Libs'] if not f.startswith('--')]
+cflags = flags('cflags.json', 'Cflags') + flags('gcc.json', 'Cflags')
+# the build tool's assembler flags: the C flags for the machine
+asflags = [f for f in cflags if f.startswith(('-m', '-fzero', '-fcommon')) or f == '-fno-pie']
+ldflags = ['--entry=_main'] + flags('cflags.json', 'Oflags')
+lists = {
+	'cflags': cflags,
+	'apeflags': flags('ape.json', 'Cflags'),
+	'asflags': asflags,
+	'ldflags': ldflags,
+	# and the machine's (386: libgcc.a, 64-bit division)
+	'libs': libs('sys/src/cmd/cmds.json') + flags('cflags.json', 'Libs'),
+	'apelibs': libs('sys/src/ape/cmd/cmds.json') + flags('cflags.json', 'Libs'),
+}
+for name, words in lists.items():
+	with open(os.path.join(d, name), 'w') as f:
+		f.write(''.join(w + '\n' for w in words))
+PY
+}
+
+[ $# -gt 0 ] || { sed -n '2,11s/^# \{0,1\}//p' "$0"; exit 1; }
 for s; do
 	case $s in
 	cross) cross ;;
 	compat) compat "$CROSS/$TARGET" ;;
 	hostlibs) hostlibs ;;
 	native) native ;;
+	plan9) plan9 ;;
 	*) echo "build.sh: unknown stage $s" >&2; exit 1 ;;
 	esac
 done

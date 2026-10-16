@@ -163,3 +163,23 @@ und das System baut sich im Gast selbst (Plan: Phasen 1–6, README.md).
 - Cross, Host-Libs, nativ für 386 gebaut (`/386/gnu` 80 MB).
 - Gast (9pc): `objtype=386 tests/cross.sh` (APE, nativ, C++) und `objtype=386 tests/native.sh`
   (APE, nativ, Objekt byte-gleich mit dem Cross-gcc) bestanden.
+
+## gccmk: mk mit gcc auf 9front (`plan9/`, `build.sh plan9`)
+
+- `gccmk` = mk in einem Namensraum: `/$objtype/mkfile` → `/$objtype/gnu/plan9/mkfile`
+  (`CC=gcc-cc LD=gcc-ld AS=gcc-as`, `O` wie bei kencc), `bind -b …/plan9/bin /bin` (`pcc`, `ar`),
+  `bind -c /$objtype/lib.gcc /$objtype/lib`. Flags = die des Tree-Builds (`cflags.json`, `gcc.json`,
+  `ape.json`, Oflags/Libs; Bibliotheksliste aus `sys/src/cmd/cmds.json` bzw. `ape/cmd`), von
+  `build.sh plan9` als eine Zeile je Argument abgelegt (`lib.rc` liest mit `ifs=$nl`).
+- Linken wie `build.exe` (`presolve`): `ld -r`, Common-Symbole schwach (`objcopy --weaken-symbols`),
+  dann alle Bibliotheken in einer Gruppe; 386 braucht `libgcc.a` (64-Bit-Division) aus
+  `cflags.json`s `Libs`.
+- `ar`: GNU ar mit `r` (mksyslibs `ar vu` nennt keine Operation) und `s` (Index für GNU ld);
+  **Mitglieder heißen `x.o` wie bei build.exe** — sonst stünden `x.6` neben den `x.o` des Builds
+  im Archiv und ld nähme womöglich das alte.
+- `tests/mk.sh` (amd64 und 386 grün): libbio (`gccmk install`, keine `.$O`-Mitglieder), Objekte
+  gleich dem Tree-Build, libc-Assembler über die GAS-Ports, hoc (yacc) und ape/cmd/expr (pcc)
+  laufen. Vergleich mit `--strip-unneeded` ohne `.eh_frame`: der Linux-gcc für i386 erzeugt
+  Unwind-Tabellen per Default, i686-pc-plan9 nicht (Code und Relokationen gleich).
+- Grenzen: Kernel, libc als Ganzes (`9syscall` schreibt 6a-Assembler), libmp/libsec (386 auch
+  `libc/386/387`): Maschinen-Assembler ohne GAS-Port → build.exe (nimmt die C-Fassungen).

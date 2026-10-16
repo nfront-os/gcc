@@ -1,0 +1,34 @@
+#!/bin/rc
+# ar: 9front's ar for mk with GNU ar (the archives hold ELF objects and
+# need GNU ld's symbol index): the key gets r when it names no operation
+# (mksyslib's "ar vu"), and s, the index. Members are named x.o as the
+# build tool names them, not x.$O: gccmk's x.6 replaces the build's
+# x.o in /$objtype/lib.gcc instead of adding a second definition; for
+# gccmk
+. /$objtype/gnu/plan9/lib.rc
+~ $#* 0 && die usage: ar key afile file...
+key=$1
+afile=$2
+shift
+shift
+if(! ~ $key *[dmpqrtx]*)
+	key=r^$key
+if(~ $key *[dmqr]*)
+	key=$key^s
+files=()
+for(f){
+	switch($f){
+	case *.$O
+		m=`{basename $f .$O}^.o
+		if(~ $key *[qr]*){
+			mkdir -p $TMP
+			cp $f $TMP/$m || die cp $f
+			m=$TMP/$m
+		}
+		files=($files $m)
+	case *
+		files=($files $f)
+	}
+}
+$GNU/ar $key $afile $files || exit $prog
+exit ''

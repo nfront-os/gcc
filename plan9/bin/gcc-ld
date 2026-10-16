@@ -1,0 +1,23 @@
+#!/bin/rc
+# gcc-ld: 6l (8l) for mk -- the objects and local archives to $O.out (or
+# -o) with every library of /$objtype/lib.gcc; for gccmk
+. /$objtype/gnu/plan9/lib.rc
+out=$O.out
+objs=()
+while(! ~ $#* 0){
+	switch($1){
+	case -o
+		out=$2
+		shift
+	case -[HTRE]
+		shift	# 6l's header type, text and data addresses, entry
+	case -*
+		;
+	case *
+		objs=($objs $1)
+	}
+	shift
+}
+linklibs=$libs
+link $out $objs
+exit ''

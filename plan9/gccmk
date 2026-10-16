@@ -1,0 +1,18 @@
+#!/bin/rc
+# gccmk [mk arguments]: mk in a namespace where 9front's mkfiles build
+# with the native gcc and binutils instead of 6c/6a/6l: /$objtype/mkfile
+# names the wrappers (gcc-cc, gcc-as, gcc-ld; pcc and ar in front of
+# /bin), and /$objtype/lib is /$objtype/lib.gcc, the libraries gcc built.
+# The flags are the tree's build's (sys/src/cmd/build, $objtype/*.json);
+# 9front's .s files need their GAS port .S beside them.
+rfork ne
+P=/$objtype/gnu/plan9
+test -r $P/mkfile || { echo gccmk: no $P/mkfile >[1=2]; exit nomkfile }
+fn fail{
+	echo gccmk: $* >[1=2]
+	exit $1
+}
+bind $P/mkfile /$objtype/mkfile || fail bind mkfile
+bind -b $P/bin /bin || fail bind bin
+bind -c /$objtype/lib.gcc /$objtype/lib || fail bind lib
+exec mk $*

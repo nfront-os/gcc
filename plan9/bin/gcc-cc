@@ -1,0 +1,13 @@
+#!/bin/rc
+# gcc-cc: 6c (8c) for mk -- each x.c to x.$O (or -o) with the native gcc
+# and the tree's flags, as the build tool compiles; for gccmk
+. /$objtype/gnu/plan9/lib.rc
+ccargs $*
+~ $#files 0 && die no files
+~ $#out 0 || ~ $#files 1 || die -o with several files
+for(f in $files){
+	o=$out
+	~ $#o 0 && o=`{basename $f .c}^.$O
+	$GNU/gcc -c -I/$objtype/include -I/sys/include -I. $cflags $defs -o $o $f || exit $prog
+}
+exit ''

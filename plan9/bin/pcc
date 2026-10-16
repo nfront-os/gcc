@@ -1,0 +1,35 @@
+#!/bin/rc
+# pcc: APE's compiler for mk -- with -c each x.c to x.$O, else compile
+# and link with the APE libraries; the native gcc with the tree's flags
+# for APE programs, as the build tool builds them; for gccmk
+. /$objtype/gnu/plan9/lib.rc
+compileonly=0
+for(a)
+	if(~ $a -c)
+		compileonly=1
+ccargs $*
+~ $#files 0 && die no files
+objs=()
+for(f in $files){
+	switch($f){
+	case *.c
+		o=`{basename $f .c}^.$O
+		if(~ $compileonly 0){
+			mkdir -p $TMP
+			o=$TMP/$o
+		}
+		if not if(! ~ $#out 0)
+			o=$out
+		$GNU/gcc -c -I/$objtype/include/ape -I/sys/include/ape -I. $cflags $apeflags $defs \
+			-o $o $f || exit $prog
+		objs=($objs $o)
+	case *
+		objs=($objs $f)
+	}
+}
+if(~ $compileonly 1)
+	exit ''
+~ $#out 0 && out=$O.out
+linklibs=$apelibs
+link $out $objs
+exit ''
