@@ -65,6 +65,5 @@ names the members `x.o` like the build tool, so `gccmk install` in a library
 replaces the build's objects.
 
 Not with gccmk: the kernel and libc as a whole (libc's `9syscall` writes 6a
-assembly), and libmp, libsec (386 also `libc/386/387`), whose machine
-assembly has no GAS port; the build tool builds them from C. `x.s` assembles
-only through its GAS port `x.S` beside it.
+assembly). `x.s` assembles through its GAS port `x.S` beside it (libc, libmp,
+libsec, lib387 have them).

@@ -181,5 +181,6 @@ und das System baut sich im Gast selbst (Plan: Phasen 1–6, README.md).
   gleich dem Tree-Build, libc-Assembler über die GAS-Ports, hoc (yacc) und ape/cmd/expr (pcc)
   laufen. Vergleich mit `--strip-unneeded` ohne `.eh_frame`: der Linux-gcc für i386 erzeugt
   Unwind-Tabellen per Default, i686-pc-plan9 nicht (Code und Relokationen gleich).
-- Grenzen: Kernel, libc als Ganzes (`9syscall` schreibt 6a-Assembler), libmp/libsec (386 auch
-  `libc/386/387`): Maschinen-Assembler ohne GAS-Port → build.exe (nimmt die C-Fassungen).
+- Grenzen: Kernel, libc als Ganzes (`9syscall` schreibt 6a-Assembler). libmp/libsec (amd64, 386)
+  und `libc/386/387` haben inzwischen GAS-Ports (9front-Repo, `tests/asm`); `tests/mk.sh` baut
+  libmp/libsec-Assembler mit gccmk und vergleicht mit dem Tree-Build.
