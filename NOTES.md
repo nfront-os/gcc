@@ -158,8 +158,7 @@ und das System baut sich im Gast selbst (Plan: Phasen 1–6, README.md).
   `PTRDIFF_*` aus `__PTRDIFF_MAX__`; `ctype.h` (`isascii`/`toascii`, in APE nur BSD; gmp).
 - `386/plan9.ld` sammelt `.init_array` wie amd64.
 - Baustruktur jetzt `build/$objtype/…` (`objtype=386 ./build.sh …`), `out/$objtype`; amd64s
-  alter Bau liegt noch in `build/` (Symlinks in `build/amd64`, absolute Pfade in den
-  configure-Bäumen).
+  alter Bau in `build/` (Symlinks aus `build/amd64`) ist ersetzt (s. „APE für C++ erweitert“).
 - Cross, Host-Libs, nativ für 386 gebaut (`/386/gnu` 80 MB).
 - Gast (9pc): `objtype=386 tests/cross.sh` (APE, nativ, C++) und `objtype=386 tests/native.sh`
   (APE, nativ, Objekt byte-gleich mit dem Cross-gcc) bestanden.
@@ -184,3 +183,114 @@ und das System baut sich im Gast selbst (Plan: Phasen 1–6, README.md).
 - Grenzen: Kernel, libc als Ganzes (`9syscall` schreibt 6a-Assembler). libmp/libsec (amd64, 386)
   und `libc/386/387` haben inzwischen GAS-Ports (9front-Repo, `tests/asm`); `tests/mk.sh` baut
   libmp/libsec-Assembler mit gccmk und vergleicht mit dem Tree-Build.
+
+## C++ nativ: g++ auf 9front (amd64, 386)
+
+- Nativer gcc jetzt mit `--enable-languages=c,c++`: `g++`, `cc1plus`, libstdc++/libsupc++ und
+  die C++-Header unter `/$objtype/gnu` (amd64 152 MB, 386 143 MB). libstdc++-Optionen für
+  Cross und nativ gemeinsam (`LIBSTDCXX_CONF` in build.sh).
+- **Exceptions gingen nirgends** (auch nicht mit dem Cross-g++, `tests/cxx.cc` mied sie): `throw`
+  → `std::terminate` → „abort“. Ursache: keine crt-Dateien, also registrierte niemand `.eh_frame`
+  beim Unwinder, und ohne `dl_iterate_phdr` gibt es keinen anderen Weg zu den FDEs. Fix wie auf
+  anderen ELF-Systemen ohne `PT_GNU_EH_FRAME`: libgcc baut `crtbegin.o`/`crtend.o` (`extra_parts`,
+  `i386/t-crtstuff`, kein PIC), `STARTFILE_SPEC`/`ENDFILE_SPEC` nennen sie (nicht bei
+  `-nostdlib`/`-nostartfiles`, also nicht im Tree-Build). `frame_dummy` steht in `.init_array`,
+  `__wrap_main` ruft es; `__register_frame_info` ist dort schwach → C-Programme ziehen den
+  Unwinder nicht herein. crtstuff braucht wie libgcc2 `-std=gnu23` (`CRTSTUFF_T_CFLAGS`).
+- 9front-Repo: `plan9.ld` (amd64, 386) sammelt `.gcc_except_table*` in einer Sektion im
+  Textsegment (vorher Orphans). C-Programme linken damit byte-gleich wie vorher.
+- **Canadian-Falle:** die Target-Bibliotheken baut der installierte Cross-g++; libstdc++s configure
+  sah damit die *installierten* libstdc++-Header — deren `<fenv.h>`-Wrapper ist leer (APE hat kein
+  fenv.h) → „fenv.h usability… yes“, `HAVE_FENV_H`, Abbruch in `floating_to_chars.cc`. Der
+  Cross-Build nimmt `xgcc -nostdinc++`; nativ jetzt ebenso: `CXX_FOR_TARGET="$TARGET-g++ -nostdinc++"`.
+- build.sh: `conf` merkt sich die configure-Argumente (`$B/<dir>.args`) und konfiguriert bei
+  Änderung neu (vorher blieb ein alter Baum stehen); fehlt die Datei, gilt der Baum als aktuell.
+- Tests: `tests/eh.cc` (throw über Rahmen, rethrow, Destruktoren beim Unwinden, `vector::at`).
+  `tests/cross.sh` (ape, plan9, cxx, eh) und `tests/native.sh` (+ cxx, eh mit dem nativen g++,
+  `samecxx`: Objekt von eh.cc byte-gleich mit dem Cross-g++) für amd64 und 386 grün.
+
+## APE für C++ erweitert (compat, musl)
+
+Ziel: libstdc++ mit allem, was es über C99/POSIX findet. Entscheidung: alles in der Toolchain
+(`compat/`, `libapecompat.a`), 9fronts APE bleibt — bis auf echte Port-Fehler (malloc, s. u.).
+
+- **musl 1.2.5** als Quelle (`sources.txt` mit Schlüsselspalte; `keys/musl.pub`, Fingerprint
+  8364 8929 0BB6 B70F 99FF DA05 56BC DB59 3020 450F; `fetch.sh` prüft `.asc`). `build.sh musl`
+  baut mit musls eigenem Makefile/Headern (`$B/musl`) und legt Objekte nach `compat-lib/musl-*.o`:
+  - libm, fenv, complex (Arch-Dateien ersetzen generische wie in musls Makefile).
+  - Wide-String-Funktionen (`wcs*`, `wcp*`, `wmem*`) und `<wctype.h>` (`isw*`, `tow*`, `wcwidth`):
+    ohne Locale, Unicode-Tabellen.
+  - Objekte, deren starke Symbole alle libap hat (C89-double-Mathe, j0, erf …), entfallen; in den
+    übrigen werden libap-Namen lokal (`objcopy --localize-symbol`): i386 `scalbn.s` ist auch
+    `ldexp`, `exp10.c` hat ein schwaches `pow10(double)` (APE: `pow10(int)`!).
+  - **Engine** (`musl-engine.o`, `ld -r`): musls vfprintf/vfscanf/strtod/vfwprintf/vfwscanf/
+    vswprintf/vswscanf/wcsto* + `compat/musl/bridge.c` (in musls Umgebung übersetzt); alle Symbole
+    lokal außer `__apecompat_m*` und `wcsto*`. Bridge-FILE = musls String-FILE mit Write-Callback
+    auf APEs `fwrite` und Read-Callback, der byteweise APEs `getc` liest (1-Byte-Puffer wie
+    `__stdio_read`: musls `ungetwc`-Makro und `shgetc` setzen `rpos` zurück und erwarten das Byte
+    im Puffer). Was scanf zurückgibt, geht per `ungetc` an APEs FILE. musls errno landet in einer
+    eigenen Variablen (`___errno_location`) und wird in APEs Nummern übersetzt (musl ENOMEM=12 ist
+    APEs EINVAL!). `__lockfile` wird nie gerufen (lock -1). Wide-Funktionen (fputwc, getwc,
+    ungetwc) in der Engine eigene: musls fragen die Locale über den Thread-Pointer (`%fs`) ab.
+- **printf/scanf**: APEs liest jedes Gleitkomma-Argument als double (`%Lf` gab Müll), kennt `%a`,
+  `%F`, `hh`, `j`, `t` nicht, `snprintf` liefert nicht C99s Länge. compat `stdio.h`: APEs
+  Deklarationen werden umbenannt, die eigenen tragen Link-Namen `__apecompat_*` (Asm-Labels) — nur
+  wo libap denselben Namen hat; sonst normale Namen (configures Link-Tests deklarieren selbst:
+  `strtold` mit Label wurde nicht gefunden).
+- **x87/SSE beim Start** (libgcc `__wrap_main`): 9fronts Kernel gibt CW 0x0232 und MXCSR 0x1900 —
+  Division durch null, Überlauf, ungültig trappen („sys: fp: division by zero“), und der x87
+  rechnet auf 53 Bit (long double = double!). Jetzt CW 0x037f, MXCSR 0x1f80 (amd64; 386 hat
+  maskierte SSE-Ausnahmen vom Kernel, ein Pentium kein MXCSR), wie jedes POSIX-x86. Nur für vom
+  Treiber gelinkte Programme; `-nostdlib` (Tree) behält die des Kernels.
+- **`<float.h>`**: APEs (`/$objtype/include/ape/float.h`) beschreibt kencc: `LDBL_*` = double,
+  `LDBL_MAX` eine double-Konstante. compat übernimmt gccs Werte (+ C99/C11-Makros), APEs Rest
+  (FPdbleword, FP*-Bits) bleibt.
+- **`wchar_t`**: gccs 32 Bit; compat `stddef.h` definiert `_WCHAR_T` vor APEs Header (der sonst
+  `unsigned short` typedeft). APEs `mbtowc` & Co. schreiben 16 Bit → unter Labels ersetzt
+  (`compat/lib/multibyte.c`, striktes UTF-8: Überlangformen, Surrogate, > 0x10FFFF = EILSEQ).
+  Wide-I/O (`wstdio.c`): ungetwc gibt die Bytes per `ungetc` in APEs Puffer zurück, sonst
+  (ungepuffert, Puffergrenze) in eine Tabelle, solange fd und Puffer des FILE gleich sind.
+- **`intmax_t`** = `__INTMAX_TYPE__` (long auf amd64; APE: long long): sonst `-Wformat` bei `%jd`
+  und ein anderer Typ als `std::intmax_t`. `int64_t` bleibt APEs long long (APEs Prototypen mit
+  `long long *`, gcc ≥ 14 bricht bei inkompatiblen Zeigern ab).
+- Zeit: `clock_gettime` über `/dev/bintime` (4. Feld = ns seit Boot, monoton, `tod.c`), dauerhaft
+  offen, `pread` (neu in compat: libaps `_PREAD` + `_syserrno`). `usleep`, `sched_yield`
+  (sleep(0)), `sysconf` mit Prozessorzahl (Zeilen von `/dev/sysstat`) und Seitengröße.
+  `unistd.h` meldet `_POSIX_TIMERS`, `_POSIX_MONOTONIC_CLOCK`, `_POSIX_THREADS`,
+  `_POSIX_TIMEOUTS` … (libstdc++ prüft danach steady_clock und timed_mutex).
+- **pthreads** (`compat/lib/pthread.c`, ein Objekt: `pthread_cancel` ist gthrs Proxy für
+  „Threads aktiv“): Thread = Proc, `rfork(RFPROC|RFMEM|RFNOWAIT)`. Ein Proc hat sein eigenes
+  Stacksegment (Kopie); darauf liegen APEs errno (`_callmain`s lokale Variable, `_errnoloc`
+  zeigt hin) und `_privates` → beide pro Thread ohne weiteres; `_privates[0]` = Thread. Threads
+  laufen auf Stacks aus malloc (geteilter Speicher), `main` auch (`__plan9_mainstack`, von
+  libgccs `__wrap_main` gerufen, wenn gelinkt; 16 MiB wie USTKSIZE) — sonst sähen andere Threads
+  mains Locals nicht (Lambdas mit `[&]`). **Falle**: nach `rfork(RFMEM)` steht das Kind auf dem
+  (geteilten) Heap-Stack des Elternteils → beide laufen auf demselben Stack (Absturz mit pc im
+  Heap). `__apecompat_rforkthread` (Asm) macht den Syscall selbst und setzt im Kind sofort SP auf
+  `privtop` (unter `__plan9_mainstack`s Rahmen, in jeder Kopie frei); Werte in Registern, die das
+  Kind bekommt (amd64 `forkret`: nur R14/R15, Rest null; 386: alle außer AX). Dort läuft der
+  Thread per `runon` auf seinem Heap-Stack und kehrt zum Aufräumen zurück (wer den Stack freigibt,
+  gibt einen frei, auf dem niemand läuft). Warten über 9front-Semaphoren (32-Bit, `s32int`):
+  Mutex nach Drepper (3 Zustände), Condition mit Warteschlange und einer Semaphore je Thread,
+  rwlock (Schreiber zuerst), once, Keys mit Sequenznummern. `exit` beendet die anderen Threads
+  (`/proc/n/ctl` „kill“). Kein `pthread_cancel`, keine prozessübergreifenden Objekte.
+- gcc: `--enable-threads=posix` (gthr-posix, emutls für `thread_local`), libstdc++ ohne
+  `--disable-wchar_t`/`--disable-libstdcxx-threads`, mit `--enable-libstdcxx-time=yes`;
+  Treiber nimmt `-pthread` an. libstdc++ findet jetzt: C99 math/stdio/stdlib/wchar/complex/fenv/
+  inttypes, CLOCK_MONOTONIC, nanosleep, sched_yield, rwlock, timedlock, nprocs.
+- **9front-Baum (echter Port-Fehler)**: APEs malloc lieferte nur 8-Byte-ausgerichtete Blöcke
+  (Schrittweite `&~7`, sbrk 4-ausgerichtet), gcc/g++ nehmen 16 an (`max_align_t`,
+  `__STDCPP_DEFAULT_NEW_ALIGNMENT__`, ausgerichtete SSE-Zugriffe). Fix in
+  `sys/src/ape/lib/ap/plan9/malloc.c` (16er-Schritt, `sbrk16`).
+- **amd64-Bauverzeichnisse**: die alten Symlinks `build/amd64/* -> ../*` (Layout vor 386) machten
+  `build/amd64/cross` zum Symlink auf `build/cross`; ein neu konfigurierter gcc mit Präfix
+  `build/amd64/cross` fand sich in `build/cross/bin` und hielt sich für verschoben → `incpath.cc`
+  stellt dann alles unter `lib/gcc/…` an den Anfang, gccs `stddef.h` vor APEs (Fehler
+  `max_align_t`). amd64 jetzt in echten Verzeichnissen neu gebaut wie 386.
+- Tests: `tests/c99math.c` (`-frounding-math`: sonst schiebt gcc `rint` über `fesetround`),
+  `c99stdio.c`, `c99time.c`, `c99wchar.c`, `pthread.c`, `cxxlib.cc` (in `cross.sh`; `cxxlib` auch
+  nativ). Testfallen: gcc faltet `rint(-x)` zu `-rint(x)`; auf 386 inlinet gcc `sqrtf` als
+  `fsqrt` mit Überpräzision; glibcs „C“-Locale ist kein UTF-8 (Hosttest: `C.UTF-8`).
+- Offen: APEs stdio hat keine Locks (Threads, die ein FILE teilen, müssen sich abstimmen;
+  `std::cout` aus mehreren Threads); `_exit`/abort beenden andere Threads nicht; keine Locales
+  außer „C“; `<uchar.h>` fehlt.

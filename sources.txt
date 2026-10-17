@@ -1,7 +1,11 @@
-# name	url	(sha256 is filled in by fetch.sh -u on first download)
+# name	url	[key]	(sha256 is filled in by fetch.sh -u on first download)
+# without key: GNU, signature url.sig, gnu-keyring.gpg; with key: signature
+# url.asc, checked against keys/<key>.pub (musl: fingerprint 8364 8929 0BB6
+# B70F 99FF DA05 56BC DB59 3020 450F, musl.libc.org/musl.pub)
 gcc	https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz
 binutils	https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz
 gmp	https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
 mpfr	https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz
 mpc	https://ftp.gnu.org/gnu/mpc/mpc-1.4.1.tar.xz
 autoconf	https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz
+musl	https://musl.libc.org/releases/musl-1.2.5.tar.gz	musl

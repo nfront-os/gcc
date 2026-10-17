@@ -1,6 +1,7 @@
 #!/bin/bash
 # Download the sources listed in sources.txt to dl/, check them against
-# the GNU signatures (gnu-keyring.gpg) and sha256.txt, unpack them to
+# their signatures (GNU: gnu-keyring.gpg; others: their key in keys/) and
+# sha256.txt, unpack them to
 # src/<name> and apply patches/<name>.patch. src/gcc and src/binutils are
 # git repositories ("pristine" commit = the tarball), so patches.sh can
 # write the patches back from their working trees.
@@ -9,12 +10,22 @@ set -e
 cd "$(dirname "$0")"
 mkdir -p dl/sig src
 [ -s dl/sig/gnu-keyring.gpg ] || curl -fL -o dl/sig/gnu-keyring.gpg https://ftp.gnu.org/gnu/gnu-keyring.gpg
-while read -r name url; do
+while read -r name url key; do
 	case $name in ''|\#*) continue ;; esac
 	f=dl/$(basename "$url")
 	[ -s "$f" ] || curl -fL -o "$f" "$url"
-	[ -s "dl/sig/${f#dl/}.sig" ] || curl -fL -o "dl/sig/${f#dl/}.sig" "$url.sig"
-	gpgv --keyring "$PWD/dl/sig/gnu-keyring.gpg" "dl/sig/${f#dl/}.sig" "$f" 2>/dev/null ||
+	if [ -n "$key" ]; then
+		# a project's own key, checked in (keys/, sources.txt)
+		sig=dl/sig/${f#dl/}.asc
+		[ -s "$sig" ] || curl -fL -o "$sig" "$url.asc"
+		gpg --dearmor < "keys/$key.pub" > "dl/sig/$key.gpg"
+		ring=$PWD/dl/sig/$key.gpg
+	else
+		sig=dl/sig/${f#dl/}.sig
+		[ -s "$sig" ] || curl -fL -o "$sig" "$url.sig"
+		ring=$PWD/dl/sig/gnu-keyring.gpg
+	fi
+	gpgv --keyring "$ring" "$sig" "$f" 2>/dev/null ||
 		{ echo "fetch: bad signature on $f" >&2; exit 1; }
 	if grep -q " $f\$" sha256.txt 2>/dev/null; then
 		grep " $f\$" sha256.txt | sha256sum -c --quiet

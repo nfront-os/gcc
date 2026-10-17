@@ -85,10 +85,10 @@ index 000000000..c71cf07f2
 +  "%{!mincoming-stack-boundary=*:-mincoming-stack-boundary=2}"
 diff --git a/gcc/config/i386/plan9.h b/gcc/config/i386/plan9.h
 new file mode 100644
-index 000000000..7a37d3bfb
+index 000000000..0864897bb
 --- /dev/null
 +++ b/gcc/config/i386/plan9.h
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,154 @@
 +/* Definitions for x86_64 9front (Plan 9) systems.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -177,7 +177,7 @@ index 000000000..7a37d3bfb
 +   macros, the same as with the Linux cross compiler.  */
 +#undef CPP_SPEC
 +#define CPP_SPEC \
-+  "%{!nostdinc:-D_POSIX_SOURCE= -D_LIMITS_EXTENSION=}"
++  "%{!nostdinc:-D_POSIX_SOURCE= -D_LIMITS_EXTENSION=} %{pthread:}"
 +
 +/* C defaults to gnu17, not gnu23: APE's headers are K&R in places --
 +   signal handlers are "void (*)()", deliberately without parameter
@@ -191,19 +191,24 @@ index 000000000..7a37d3bfb
 +#undef STANDARD_STARTFILE_PREFIX_2
 +#define STANDARD_STARTFILE_PREFIX_2 "/" PLAN9_OBJTYPE "/lib.gcc/"
 +
-+/* The entry point _main is in the C library (APE's main9.S, libc's);
-+   there are no crt files.  */
++/* The entry point _main is in the C library (APE's main9.S, libc's).
++   The only crt files are libgcc's crtbegin.o and crtend.o: there is no
++   dl_iterate_phdr, so crtbegin.o's frame_dummy (in .init_array, run by
++   __wrap_main) registers .eh_frame with the unwinder, and crtend.o ends
++   it with the zero terminator.  Programs without exceptions register
++   nothing: the unwinder's __register_frame_info is weak there.  */
 +#undef STARTFILE_SPEC
-+#define STARTFILE_SPEC ""
++#define STARTFILE_SPEC "%{!nostdlib:%{!nostartfiles:crtbegin.o%s}}"
 +#undef ENDFILE_SPEC
-+#define ENDFILE_SPEC ""
++#define ENDFILE_SPEC "%{!nostdlib:%{!nostartfiles:crtend.o%s}}"
 +
 +/* APE's headers name their libraries with #pragma lib, which gcc
 +   ignores: libbsd (sockets, popen, getopt; only what is used is
 +   linked) and libap.  Before them the toolchain's additions to APE
-+   (libapecompat.a in $prefix/x86_64-pc-plan9/lib: asprintf, ...).  */
++   (libapecompat.a in $prefix/x86_64-pc-plan9/lib: asprintf, ...,
++   pthreads: -pthread needs nothing more, it is taken and dropped).  */
 +#undef LIB_SPEC
-+#define LIB_SPEC "-lapecompat -lbsd -lap"
++#define LIB_SPEC "-lapecompat -lbsd -lap %{pthread:}"
 +
 +/* The math functions are in libap too: g++ adds no -lm.  */
 +#undef MATH_LIBRARY
@@ -294,25 +299,28 @@ index 9234ead0d..6f5234e4e 100644
    /* In the case of a normal #include, we're now at the start of the
       line *following* the #include.  A separate location_t for this
 diff --git a/libgcc/config.host b/libgcc/config.host
-index ac10ccc43..367e0f5d2 100644
+index ac10ccc43..6beeb8f89 100644
 --- a/libgcc/config.host
 +++ b/libgcc/config.host
-@@ -754,6 +754,9 @@ x86_64-*-elf* | x86_64-*-rtems*)
+@@ -754,6 +754,12 @@ x86_64-*-elf* | x86_64-*-rtems*)
  	    ;;
  	esac
  	;;
 +x86_64-*-plan9* | i[34567]86-*-plan9*)
-+	tmake_file="$tmake_file i386/t-plan9"
++	# crtbegin.o registers .eh_frame for the unwinder (C++ exceptions):
++	# there is no dl_iterate_phdr; static, so no PIC
++	tmake_file="$tmake_file i386/t-crtstuff i386/t-plan9"
++	extra_parts="crtbegin.o crtend.o"
 +	;;
  x86_64-*-fuchsia*)
  	tmake_file="$tmake_file t-libgcc-pic"
  	;;
 diff --git a/libgcc/config/i386/plan9-main.c b/libgcc/config/i386/plan9-main.c
 new file mode 100644
-index 000000000..002fb3097
+index 000000000..9161f2c5c
 --- /dev/null
 +++ b/libgcc/config/i386/plan9-main.c
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,74 @@
 +/* Run the constructors of a 9front (Plan 9) program before main.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -341,7 +349,17 @@ index 000000000..002fb3097
 +   know nothing of .init_array.  The driver links with --wrap=main
 +   (config/i386/plan9.h), so they call __wrap_main, which runs the
 +   constructors /$objtype/plan9.ld collected, then the program's main.
-+   The symbols are weak: a linker script without them runs none.  */
++   The symbols are weak: a linker script without them runs none.
++
++   Before them it sets up the floating point unit as C99 (Annex F) and
++   every POSIX x86 system start a program: 9front's kernel gives a process
++   x87 control word 0x0232 and (amd64) MXCSR 0x1900 -- invalid operation,
++   division by zero and overflow trap (a note, "sys: fp: ..."), and the
++   x87 rounds to 53 bits, so long double is only double.  Here 0x037f:
++   all exceptions masked, 64-bit precision, round to nearest; MXCSR
++   0x1f80 on amd64 (the 386 kernel masks SSE's already, and a Pentium
++   has no MXCSR).  Programs linked -nostdlib (native Plan 9 C) keep the
++   kernel's.  */
 +
 +typedef void (*func_ptr) (void);
 +
@@ -351,27 +369,45 @@ index 000000000..002fb3097
 +extern int __real_main (int, char **, char **);
 +extern int __wrap_main (int, char **, char **);
 +
++/* The toolchain's pthreads (libapecompat.a, compat/lib/pthread.c), when
++   linked: runs main on a stack from malloc, shared memory as the other
++   threads' stacks (a proc's stack segment is its own).  */
++extern int __plan9_mainstack (int (*) (int, char **, char **), int,
++			      char **, char **) __attribute__ ((weak));
++
 +int
 +__wrap_main (int argc, char **argv, char **envp)
 +{
 +  func_ptr *p;
++  unsigned short cw = 0x037f;
 +
++  __asm__ __volatile__ ("fldcw %0" : : "m" (cw));
++#ifdef __x86_64__
++  {
++    unsigned int csr = 0x1f80;
++
++    __asm__ __volatile__ ("ldmxcsr %0" : : "m" (csr));
++  }
++#endif
 +  for (p = __init_array_start; p < __init_array_end; p++)
 +    (*p) ();
++  if (__plan9_mainstack)
++    return __plan9_mainstack (__real_main, argc, argv, envp);
 +  return __real_main (argc, argv, envp);
 +}
 diff --git a/libgcc/config/i386/t-plan9 b/libgcc/config/i386/t-plan9
 new file mode 100644
-index 000000000..ef1c55d07
+index 000000000..3b98826dd
 --- /dev/null
 +++ b/libgcc/config/i386/t-plan9
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,13 @@
 +# 9front: constructors before main (plan9-main.c)
 +LIB2ADD += $(srcdir)/config/i386/plan9-main.c
 +
 +# The target's C default is gnu17 (APE's K&R declarations, plan9.h);
-+# libgcc is written for gcc's own, gnu23 (bool).
++# libgcc is written for gcc's own, gnu23 (bool); so is crtstuff.c.
 +HOST_LIBGCC2_CFLAGS += -std=gnu23
++CRTSTUFF_T_CFLAGS += -std=gnu23
 +
 +# The 386's default -mincoming-stack-boundary=2 (i386/plan9-386.h) means
 +# stack realignment, which __builtin_eh_return in the unwinder cannot

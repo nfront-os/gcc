@@ -1,4 +1,4 @@
-// C++: libstdc++ over APE, static constructors, exceptions-free containers
+// C++: libstdc++ over APE, static constructors, containers (eh.cc: exceptions)
 #include <cstdio>
 #include <map>
 #include <string>

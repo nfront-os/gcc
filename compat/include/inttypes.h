@@ -1,8 +1,8 @@
 /*
  * 9front-gcc: the <inttypes.h> macros of C99 APE's lacks (PRIi, PRIX,
  * the SCN family, the MAX/PTR, LEAST/FAST variants), for APE's types:
- * int8..int32 int (promoted), 64 bit and intmax_t long long, intptr_t
- * long long on amd64 and int on 386.
+ * int8..int32 int (promoted), 64 bit long long, intptr_t long long on
+ * amd64 and int on 386; intmax_t the compiler's (compat <stdint.h>: j).
  */
 #include_next <inttypes.h>
 
@@ -46,7 +46,7 @@
 #define PRIdFAST64 "lld"
 #endif
 #ifndef PRIdMAX
-#define PRIdMAX "lld"
+#define PRIdMAX "jd"
 #endif
 #ifndef PRIdPTR
 #if __SIZEOF_POINTER__ == 8
@@ -92,7 +92,7 @@
 #define PRIiFAST64 "lli"
 #endif
 #ifndef PRIiMAX
-#define PRIiMAX "lli"
+#define PRIiMAX "ji"
 #endif
 #ifndef PRIiPTR
 #if __SIZEOF_POINTER__ == 8
@@ -138,7 +138,7 @@
 #define PRIoFAST64 "llo"
 #endif
 #ifndef PRIoMAX
-#define PRIoMAX "llo"
+#define PRIoMAX "jo"
 #endif
 #ifndef PRIoPTR
 #if __SIZEOF_POINTER__ == 8
@@ -184,7 +184,7 @@
 #define PRIuFAST64 "llu"
 #endif
 #ifndef PRIuMAX
-#define PRIuMAX "llu"
+#define PRIuMAX "ju"
 #endif
 #ifndef PRIuPTR
 #if __SIZEOF_POINTER__ == 8
@@ -230,7 +230,7 @@
 #define PRIxFAST64 "llx"
 #endif
 #ifndef PRIxMAX
-#define PRIxMAX "llx"
+#define PRIxMAX "jx"
 #endif
 #ifndef PRIxPTR
 #if __SIZEOF_POINTER__ == 8
@@ -276,7 +276,7 @@
 #define PRIXFAST64 "llX"
 #endif
 #ifndef PRIXMAX
-#define PRIXMAX "llX"
+#define PRIXMAX "jX"
 #endif
 #ifndef PRIXPTR
 #if __SIZEOF_POINTER__ == 8
@@ -322,7 +322,7 @@
 #define SCNdFAST64 "lld"
 #endif
 #ifndef SCNdMAX
-#define SCNdMAX "lld"
+#define SCNdMAX "jd"
 #endif
 #ifndef SCNdPTR
 #if __SIZEOF_POINTER__ == 8
@@ -368,7 +368,7 @@
 #define SCNiFAST64 "lli"
 #endif
 #ifndef SCNiMAX
-#define SCNiMAX "lli"
+#define SCNiMAX "ji"
 #endif
 #ifndef SCNiPTR
 #if __SIZEOF_POINTER__ == 8
@@ -414,7 +414,7 @@
 #define SCNoFAST64 "llo"
 #endif
 #ifndef SCNoMAX
-#define SCNoMAX "llo"
+#define SCNoMAX "jo"
 #endif
 #ifndef SCNoPTR
 #if __SIZEOF_POINTER__ == 8
@@ -460,7 +460,7 @@
 #define SCNuFAST64 "llu"
 #endif
 #ifndef SCNuMAX
-#define SCNuMAX "llu"
+#define SCNuMAX "ju"
 #endif
 #ifndef SCNuPTR
 #if __SIZEOF_POINTER__ == 8
@@ -506,7 +506,7 @@
 #define SCNxFAST64 "llx"
 #endif
 #ifndef SCNxMAX
-#define SCNxMAX "llx"
+#define SCNxMAX "jx"
 #endif
 #ifndef SCNxPTR
 #if __SIZEOF_POINTER__ == 8
@@ -514,6 +514,23 @@
 #else
 #define SCNxPTR "x"
 #endif
+#endif
+
+/* C99's functions APE lacks (libapecompat.a; it has strtoimax); C99
+ * has <inttypes.h> define wchar_t (C++: the keyword) */
+#include <stddef.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+typedef struct { intmax_t quot, rem; } imaxdiv_t;
+extern uintmax_t	strtoumax(const char *, char **, int);
+extern intmax_t	imaxabs(intmax_t);
+extern imaxdiv_t	imaxdiv(intmax_t, intmax_t);
+/* musl's (libapecompat.a) */
+extern intmax_t	wcstoimax(const wchar_t *, wchar_t **, int);
+extern uintmax_t	wcstoumax(const wchar_t *, wchar_t **, int);
+#ifdef __cplusplus
+}
 #endif
 
 #endif
