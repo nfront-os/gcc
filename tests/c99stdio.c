@@ -67,7 +67,13 @@ main(void)
 	setlocale(LC_CTYPE, "C.UTF-8");
 #endif
 	/* printf: C99's conversions and length modifiers */
+	/* pi to 18 places in the machine's long double: x87's 64-bit
+	 * mantissa rounds up, IEEE quad (riscv64) has it right */
+#if LDBL_MANT_DIG == 113
+	check("%Lf", fmt("3.141592653589793238", "%.18Lf", 3.141592653589793238462643383279L));
+#else
 	check("%Lf", fmt("3.141592653589793239", "%.18Lf", 3.141592653589793238462643383279L));
+#endif
 	check("%Le", fmt("1.000000e+4000", "%Le", 1e4000L));
 	check("%a", fmt("0x1.8p+1", "%a", 3.0));
 	check("%F", fmt("INF NAN", "%F %F", (double)INFINITY, (double)NAN));
@@ -119,7 +125,11 @@ main(void)
 	check("strtof", fl == 0.1f && *end == 0);
 	ld = strtold("0x1.8p1L", &end);
 	check("strtold hex", ld == 3.0L && strcmp(end, "L") == 0);
+#if LDBL_MANT_DIG == 113
+	ld = strtold("1.18973149535723176508575932662800702e+4932", NULL);
+#else
 	ld = strtold("1.18973149535723176502e+4932", NULL);
+#endif
 	check("strtold LDBL_MAX", ld == LDBL_MAX);
 	errno = 0;
 	ld = strtold("1e99999", NULL);

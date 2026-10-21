@@ -18,7 +18,7 @@ index c818a0802..d48f99d41 100644
        /* If preprocessing assembly language, accept any of the C-family
  	 front end options since the driver may pass them through.  */
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index 743421768..011c5a7b6 100644
+index 743421768..f2370e4cb 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
 @@ -1063,6 +1063,11 @@ case ${target} in
@@ -38,18 +38,35 @@ index 743421768..011c5a7b6 100644
  	esac
  	;;
 +x86_64-*-plan9*)
-+	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/x86-64.h i386/plan9.h"
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/x86-64.h i386/plan9.h plan9.h"
 +	extra_objs="${extra_objs} gnu-property.o"
 +	tmake_file="${tmake_file} i386/t-gnu-property"
 +	;;
 +i[34567]86-*-plan9*)
-+	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/plan9-386.h i386/plan9.h"
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/plan9-386.h i386/plan9.h plan9.h"
 +	extra_objs="${extra_objs} gnu-property.o"
 +	tmake_file="${tmake_file} i386/t-gnu-property"
 +	;;
  x86_64-*-fuchsia*)
  	tmake_file="${tmake_file} i386/t-x86_64-elf"
  	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h i386/x86-64.h fuchsia.h"
+@@ -2610,6 +2625,16 @@ riscv*-*-gnu*)
+ 	# automatically detect that GAS supports it, yet we require it.
+ 	gcc_cv_initfini_array=yes
+ 	;;
++riscv*-*-plan9*)
++	tm_file="elfos.h glibc-stdint.h ${tm_file} riscv/plan9.h plan9.h"
++	tmake_file="${tmake_file} riscv/t-riscv"
++	# unwind tables in every function, as riscv64-linux-gnu: the same
++	# objects as the Linux cross build of the tree
++	tm_defines="${tm_defines} TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
++	gnu_ld=yes
++	gas=yes
++	gcc_cv_initfini_array=yes
++	;;
+ riscv*-*-elf* | riscv*-*-rtems*)
+ 	tm_file="elfos.h newlib-stdint.h ${tm_file} riscv/elf.h"
+ 	case ${target} in
 diff --git a/gcc/config/i386/plan9-386.h b/gcc/config/i386/plan9-386.h
 new file mode 100644
 index 000000000..c71cf07f2
@@ -85,10 +102,10 @@ index 000000000..c71cf07f2
 +  "%{!mincoming-stack-boundary=*:-mincoming-stack-boundary=2}"
 diff --git a/gcc/config/i386/plan9.h b/gcc/config/i386/plan9.h
 new file mode 100644
-index 000000000..0864897bb
+index 000000000..fa488b283
 --- /dev/null
 +++ b/gcc/config/i386/plan9.h
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,33 @@
 +/* Definitions for x86_64 9front (Plan 9) systems.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -108,21 +125,57 @@ index 000000000..0864897bb
 +along with GCC; see the file COPYING3.  If not see
 +<http://www.gnu.org/licenses/>.  */
 +
++/* x86 9front (Plan 9): System V ABI; before plan9.h, which has the rest.  */
++
++/* /$objtype: i386/plan9-386.h sets 386 */
++#ifndef PLAN9_OBJTYPE
++#define PLAN9_OBJTYPE "amd64"
++#endif
++
++/* Objects carry the notes the Linux compiler writes (.note.GNU-stack,
++   .note.gnu.property with -fcf-protection): the same objects as the
++   Linux cross build; plan9.ld discards them.  */
++extern void file_end_indicate_exec_stack_and_gnu_property (void);
++#undef TARGET_ASM_FILE_END
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack_and_gnu_property
++
+diff --git a/gcc/config/plan9.h b/gcc/config/plan9.h
+new file mode 100644
+index 000000000..5dc5b28b7
+--- /dev/null
++++ b/gcc/config/plan9.h
+@@ -0,0 +1,148 @@
++/* Definitions for 9front (Plan 9) systems.
++   Copyright (C) 2026 Free Software Foundation, Inc.
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 3, or (at your option)
++any later version.
++
++GCC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING3.  If not see
++<http://www.gnu.org/licenses/>.  */
++
 +/* 9front built with gcc: statically linked ELF programs in the layout of
-+   /$objtype/plan9.ld, System V ABI, LP64.  The code generated is that of
-+   x86_64-linux-gnu for the same options, so a tree built by this compiler
-+   equals one built by the Linux cross build.
++   /$objtype/plan9.ld.  The code generated is that of the machine's Linux
++   compiler for the same options, so a tree built by this compiler equals
++   one built by the Linux cross build.  The machine's header (i386/plan9.h,
++   riscv/plan9.h) comes first and sets PLAN9_OBJTYPE, and the machine's
++   parts of the specs (PLAN9_CC1_SPEC, PLAN9_LINK_SPEC).
 +
 +   Without -nostdinc and -nostdlib the driver is a POSIX compiler over APE:
 +   the headers of /$objtype/include/ape and /sys/include/ape, the library
 +   /$objtype/lib.gcc/ape/libap.a.  Native Plan 9 C passes -nostdinc
 +   -I/$objtype/include -I/sys/include and links libc.a itself, as the
 +   build tool does.  */
-+
-+/* /$objtype: i386/plan9-386.h sets 386 */
-+#ifndef PLAN9_OBJTYPE
-+#define PLAN9_OBJTYPE "amd64"
-+#endif
 +
 +#undef TARGET_OS_CPP_BUILTINS
 +#define TARGET_OS_CPP_BUILTINS()		\
@@ -145,7 +198,7 @@ index 000000000..0864897bb
 +   comes first, as with pcc; both after the C++ directories (whose
 +   <cstdlib> &c. #include_next the C headers) and before gcc's own, whose
 +   stddef.h, stdarg.h, float.h, limits.h and stdint.h APE has itself.
-+   Before them the tool directory ($prefix/x86_64-pc-plan9/include): the
++   Before them the tool directory ($prefix/$target/include): the
 +   toolchain's additions to APE (C99 and POSIX.1-2008 errno values,
 +   fpclassify), which #include_next APE's headers.  */
 +#define SYSTEM_IMPLICIT_EXTERN_C 1
@@ -205,7 +258,7 @@ index 000000000..0864897bb
 +/* APE's headers name their libraries with #pragma lib, which gcc
 +   ignores: libbsd (sockets, popen, getopt; only what is used is
 +   linked) and libap.  Before them the toolchain's additions to APE
-+   (libapecompat.a in $prefix/x86_64-pc-plan9/lib: asprintf, ...,
++   (libapecompat.a in $prefix/$target/lib: asprintf, ...,
 +   pthreads: -pthread needs nothing more, it is taken and dropped).  */
 +#undef LIB_SPEC
 +#define LIB_SPEC "-lapecompat -lbsd -lap %{pthread:}"
@@ -215,16 +268,20 @@ index 000000000..0864897bb
 +#define MATH_LIBRARY ""
 +
 +/* plan9.ld collects .init_array; the C library does not run it, so
-+   main is wrapped by libgcc's __wrap_main (config/i386/plan9-main.c),
++   main is wrapped by libgcc's __wrap_main (config/plan9-main.c),
 +   which runs the constructors first.  */
++/* The machine's linker options, each with a leading blank.  */
++#ifndef PLAN9_LINK_SPEC
++#define PLAN9_LINK_SPEC ""
++#endif
 +#undef LINK_SPEC
 +#define LINK_SPEC							\
 +  "-static -z noseparate-code -z max-page-size=0x1000 -z noexecstack"	\
 +  " %{!T*:-T %R/" PLAN9_OBJTYPE "/plan9.ld}"				\
-+  " %{!nostdlib:%{!nodefaultlibs:--wrap=main}}"
++  " %{!nostdlib:%{!nodefaultlibs:--wrap=main}}" PLAN9_LINK_SPEC
 +
-+/* No shared libraries, no PIE.  The 386 adds its defaults
-+   (i386/plan9-386.h).  */
++/* No shared libraries, no PIE.  The machine adds its defaults
++   (i386/plan9-386.h, riscv/plan9.h).  */
 +#ifndef PLAN9_CC1_SPEC
 +#define PLAN9_CC1_SPEC ""
 +#endif
@@ -233,16 +290,53 @@ index 000000000..0864897bb
 +
 +#undef LINK_EH_SPEC
 +
-+/* Objects carry the notes the Linux compiler writes (.note.GNU-stack,
-+   .note.gnu.property with -fcf-protection): the same objects as the
-+   Linux cross build; plan9.ld discards them.  */
-+extern void file_end_indicate_exec_stack_and_gnu_property (void);
-+#undef TARGET_ASM_FILE_END
-+#define TARGET_ASM_FILE_END file_end_indicate_exec_stack_and_gnu_property
-+
 +/* The C library has atexit; no __cxa_atexit, no __dso_handle.  */
 +#undef DEFAULT_USE_CXA_ATEXIT
 +#define DEFAULT_USE_CXA_ATEXIT 0
+diff --git a/gcc/config/riscv/plan9.h b/gcc/config/riscv/plan9.h
+new file mode 100644
+index 000000000..f6cf0740a
+--- /dev/null
++++ b/gcc/config/riscv/plan9.h
+@@ -0,0 +1,38 @@
++/* Definitions for RISC-V 9front (Plan 9) systems, before plan9.h.
++   Copyright (C) 2026 Free Software Foundation, Inc.
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 3, or (at your option)
++any later version.
++
++GCC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING3.  If not see
++<http://www.gnu.org/licenses/>.  */
++
++/* riscv64 9front: the psABI (lp64d), the flags of the tree's build
++   (riscv64/cflags.json): configure --with-arch=rv64gc --with-abi=lp64d
++   --with-cmodel=medany.  */
++
++#define PLAN9_OBJTYPE "riscv64"
++
++/* No linker relaxation: nothing sets gp (__global_pointer$) for a
++   program -- neither 9front's _main nor the kernel, and jc's code uses
++   the register as its static base -- so gp-relative accesses are out;
++   the tree compiles -mno-relax and links --no-relax (which is enough
++   for assembly that has relaxable relocations).  An explicit -mrelax
++   wins (and needs a gp of its own).  */
++#define PLAN9_CC1_SPEC "%{!mrelax:-mno-relax}"
++#define PLAN9_LINK_SPEC " %{!mrelax:--no-relax}"
++
++/* char is signed, as with 9front's compilers (jc) and the tree's
++   -fsigned-char.  */
++#undef DEFAULT_SIGNED_CHAR
++#define DEFAULT_SIGNED_CHAR 1
 diff --git a/gcc/gcc.cc b/gcc/gcc.cc
 index 43b0158ee..31122e5cb 100644
 --- a/gcc/gcc.cc
@@ -299,7 +393,7 @@ index 9234ead0d..6f5234e4e 100644
    /* In the case of a normal #include, we're now at the start of the
       line *following* the #include.  A separate location_t for this
 diff --git a/libgcc/config.host b/libgcc/config.host
-index ac10ccc43..6beeb8f89 100644
+index ac10ccc43..d2250b352 100644
 --- a/libgcc/config.host
 +++ b/libgcc/config.host
 @@ -754,6 +754,12 @@ x86_64-*-elf* | x86_64-*-rtems*)
@@ -309,18 +403,42 @@ index ac10ccc43..6beeb8f89 100644
 +x86_64-*-plan9* | i[34567]86-*-plan9*)
 +	# crtbegin.o registers .eh_frame for the unwinder (C++ exceptions):
 +	# there is no dl_iterate_phdr; static, so no PIC
-+	tmake_file="$tmake_file i386/t-crtstuff i386/t-plan9"
++	tmake_file="$tmake_file i386/t-crtstuff t-plan9 i386/t-plan9"
 +	extra_parts="crtbegin.o crtend.o"
 +	;;
  x86_64-*-fuchsia*)
  	tmake_file="$tmake_file t-libgcc-pic"
  	;;
-diff --git a/libgcc/config/i386/plan9-main.c b/libgcc/config/i386/plan9-main.c
+@@ -1352,6 +1358,12 @@ riscv*-*-linux*)
+ 	extra_parts="$extra_parts crtbegin.o crtend.o crti.o crtn.o crtendS.o crtbeginT.o"
+ 	md_unwind_header=riscv/linux-unwind.h
+ 	;;
++riscv*-*-plan9*)
++	# crtbegin.o registers .eh_frame for the unwinder (C++ exceptions):
++	# there is no dl_iterate_phdr; static, so no PIC
++	tmake_file="${tmake_file} riscv/t-softfp${host_address} t-softfp riscv/t-elf riscv/t-elf${host_address} riscv/t-crtstuff t-plan9"
++	extra_parts="crtbegin.o crtend.o"
++	;;
+ riscv*-*-freebsd*)
+ 	tmake_file="${tmake_file} riscv/t-crtstuff riscv/t-softfp${host_address} t-softfp riscv/t-elf riscv/t-elf${host_address} t-slibgcc-libgcc"
+ 	extra_parts="$extra_parts crtbegin.o crtend.o crti.o crtn.o crtendS.o crtbeginT.o"
+diff --git a/libgcc/config/i386/t-plan9 b/libgcc/config/i386/t-plan9
 new file mode 100644
-index 000000000..9161f2c5c
+index 000000000..a4184b764
 --- /dev/null
-+++ b/libgcc/config/i386/plan9-main.c
-@@ -0,0 +1,74 @@
++++ b/libgcc/config/i386/t-plan9
+@@ -0,0 +1,5 @@
++# The 386's default -mincoming-stack-boundary=2 (i386/plan9-386.h) means
++# stack realignment, which __builtin_eh_return in the unwinder cannot
++# have; it is called by C++'s exception handling, from gcc-compiled code
++CFLAGS-unwind-dw2.c += -mincoming-stack-boundary=4
++CFLAGS-unwind-sjlj.c += -mincoming-stack-boundary=4
+diff --git a/libgcc/config/plan9-main.c b/libgcc/config/plan9-main.c
+new file mode 100644
+index 000000000..0a1b901c9
+--- /dev/null
++++ b/libgcc/config/plan9-main.c
+@@ -0,0 +1,77 @@
 +/* Run the constructors of a 9front (Plan 9) program before main.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -347,19 +465,20 @@ index 000000000..9161f2c5c
 +
 +/* The C libraries' _main (APE's main9.S, libc's) call main directly and
 +   know nothing of .init_array.  The driver links with --wrap=main
-+   (config/i386/plan9.h), so they call __wrap_main, which runs the
++   (gcc/config/plan9.h), so they call __wrap_main, which runs the
 +   constructors /$objtype/plan9.ld collected, then the program's main.
 +   The symbols are weak: a linker script without them runs none.
 +
-+   Before them it sets up the floating point unit as C99 (Annex F) and
-+   every POSIX x86 system start a program: 9front's kernel gives a process
++   Before them, on x86, it sets up the floating point unit as C99 (Annex F)
++   and every POSIX x86 system start a program: 9front's kernel gives a process
 +   x87 control word 0x0232 and (amd64) MXCSR 0x1900 -- invalid operation,
 +   division by zero and overflow trap (a note, "sys: fp: ..."), and the
 +   x87 rounds to 53 bits, so long double is only double.  Here 0x037f:
 +   all exceptions masked, 64-bit precision, round to nearest; MXCSR
 +   0x1f80 on amd64 (the 386 kernel masks SSE's already, and a Pentium
 +   has no MXCSR).  Programs linked -nostdlib (native Plan 9 C) keep the
-+   kernel's.  */
++   kernel's.  RISC-V's floating point never traps, and the kernel starts
++   a program with fcsr 0 (round to nearest, no flags): nothing to do.  */
 +
 +typedef void (*func_ptr) (void);
 +
@@ -379,6 +498,7 @@ index 000000000..9161f2c5c
 +__wrap_main (int argc, char **argv, char **envp)
 +{
 +  func_ptr *p;
++#if defined (__i386__) || defined (__x86_64__)
 +  unsigned short cw = 0x037f;
 +
 +  __asm__ __volatile__ ("fldcw %0" : : "m" (cw));
@@ -389,31 +509,27 @@ index 000000000..9161f2c5c
 +    __asm__ __volatile__ ("ldmxcsr %0" : : "m" (csr));
 +  }
 +#endif
++#endif
 +  for (p = __init_array_start; p < __init_array_end; p++)
 +    (*p) ();
 +  if (__plan9_mainstack)
 +    return __plan9_mainstack (__real_main, argc, argv, envp);
 +  return __real_main (argc, argv, envp);
 +}
-diff --git a/libgcc/config/i386/t-plan9 b/libgcc/config/i386/t-plan9
+diff --git a/libgcc/config/t-plan9 b/libgcc/config/t-plan9
 new file mode 100644
-index 000000000..3b98826dd
+index 000000000..7af586eb6
 --- /dev/null
-+++ b/libgcc/config/i386/t-plan9
-@@ -0,0 +1,13 @@
++++ b/libgcc/config/t-plan9
+@@ -0,0 +1,8 @@
 +# 9front: constructors before main (plan9-main.c)
-+LIB2ADD += $(srcdir)/config/i386/plan9-main.c
++LIB2ADD += $(srcdir)/config/plan9-main.c
 +
-+# The target's C default is gnu17 (APE's K&R declarations, plan9.h);
-+# libgcc is written for gcc's own, gnu23 (bool); so is crtstuff.c.
++# The target's C default is gnu17 (APE's K&R declarations, gcc's
++# config/plan9.h); libgcc is written for gcc's own, gnu23 (bool); so is
++# crtstuff.c.
 +HOST_LIBGCC2_CFLAGS += -std=gnu23
 +CRTSTUFF_T_CFLAGS += -std=gnu23
-+
-+# The 386's default -mincoming-stack-boundary=2 (i386/plan9-386.h) means
-+# stack realignment, which __builtin_eh_return in the unwinder cannot
-+# have; it is called by C++'s exception handling, from gcc-compiled code
-+CFLAGS-unwind-dw2.c += -mincoming-stack-boundary=4
-+CFLAGS-unwind-sjlj.c += -mincoming-stack-boundary=4
 diff --git a/libiberty/lrealpath.c b/libiberty/lrealpath.c
 index ce228dbb3..600312951 100644
 --- a/libiberty/lrealpath.c

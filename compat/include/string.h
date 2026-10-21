@@ -4,6 +4,8 @@
  * declares strndup, without const, but has no implementation; its
  * declaration is renamed while APE's header is read) and strcasecmp &
  * co. from <strings.h>, which glibc, musl and the BSDs declare here too.
+ * strtok_r is libap's; APE declares it only with _REENTRANT_SOURCE, which
+ * would bring its non-POSIX strerror_r along.
  */
 #ifndef __9FRONT_GCC_STRING
 #define __9FRONT_GCC_STRING
@@ -17,6 +19,7 @@ extern "C" {
 extern char	*stpcpy(char *, const char *);
 extern char	*stpncpy(char *, const char *, size_t);
 extern char	*strndup(const char *, size_t);
+extern char	*strtok_r(char *, const char *, char **);
 #ifdef __cplusplus
 }
 #endif

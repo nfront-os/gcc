@@ -15,6 +15,8 @@ case amd64
 	O=6
 case 386
 	O=8
+case riscv64
+	O=j
 case *
 	die objtype $objtype: no gcc
 }

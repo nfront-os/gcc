@@ -103,8 +103,51 @@ _Noreturn void __apecompat_threadstart(struct __pthread *t);
  * its parent (pc64/l.s forkret), the rest zero: privtop and t there.
  * 386: number in AX, argument at 4(SP), INT $64; the child gets every
  * register of its parent but AX: privtop and t in SI and DI.
+ * riscv64: number and result in s0 (x8), the argument at 8(sp), ECALL
+ * (the stubs of gen-9syscall.sh); the child gets every register of its
+ * parent but s0 (riscv64/trap.c forkchild): privtop and t in s1 and s2.
  */
-#ifdef __x86_64__
+#if defined(__riscv)
+__asm__(
+	".text\n"
+	".globl __apecompat_runon\n"
+	"__apecompat_runon:\n"
+	"	addi	sp, sp, -16\n"
+	"	sd	ra, 8(sp)\n"
+	"	sd	s0, 0(sp)\n"
+	"	mv	s0, sp\n"
+	"	mv	sp, a0\n"
+	"	mv	a0, a2\n"
+	"	jalr	a1\n"
+	"	mv	sp, s0\n"
+	"	ld	ra, 8(sp)\n"
+	"	ld	s0, 0(sp)\n"
+	"	addi	sp, sp, 16\n"
+	"	ret\n"
+	".globl __apecompat_rforkthread\n"
+	"__apecompat_rforkthread:\n"
+	"	addi	sp, sp, -32\n"
+	"	sd	s0, 24(sp)\n"
+	"	sd	s1, 16(sp)\n"
+	"	sd	s2, 0(sp)\n"
+	"	mv	s1, a1\n"
+	"	mv	s2, a2\n"
+	"	sw	a0, 8(sp)\n"
+	"	li	s0, 19\n"	/* RFORK */
+	"	ecall\n"
+	"	beqz	s0, 1f\n"
+	"	mv	a0, s0\n"
+	"	ld	s0, 24(sp)\n"
+	"	ld	s1, 16(sp)\n"
+	"	ld	s2, 0(sp)\n"
+	"	addi	sp, sp, 32\n"
+	"	ret\n"
+	"1:	mv	sp, s1\n"
+	"	mv	a0, s2\n"
+	"	call	__apecompat_threadstart\n"
+	"2:	j	2b\n"
+);
+#elif defined(__x86_64__)
 __asm__(
 	".text\n"
 	".globl __apecompat_runon\n"

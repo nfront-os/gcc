@@ -9,9 +9,16 @@
 # per test.
 set -e
 TOP=$(cd "$(dirname "$0")/.." && pwd)
-export PLAN9=${PLAN9:-$(cd "$TOP/../9front" && pwd)}
 export objtype=${objtype:-amd64}
-case $objtype in amd64) O=6 ;; 386) O=8 ;; esac
+# riscv64: the branch with the port, beside the tree
+[ -n "$PLAN9" ] || [ $objtype != riscv64 ] || [ ! -d "$TOP/../9front-riscv" ] || PLAN9=$TOP/../9front-riscv
+export PLAN9=$(cd "${PLAN9:-$TOP/../9front}" && pwd)
+case $objtype in amd64) O=6 ;; 386) O=8 ;; riscv64) O=j ;; esac
+case $objtype in amd64) TARGET=x86_64-pc-plan9 ;; 386) TARGET=i686-pc-plan9 ;; riscv64) TARGET=riscv64-unknown-plan9 ;; esac
+# libc's assembly to compare; libmp's and libsec's where the machine has
+# some (riscv64 none)
+case $objtype in riscv64) ASM="memmove strcmp setjmp" MPSEC= ;;
+*) ASM="memmove strlen setjmp" MPSEC="libmp:mpvecadd libmp:mpdigdiv libsec:md5block libsec:sha1block" ;; esac
 [ -r "$TOP/out/$objtype/$objtype/gnu/plan9/mkfile" ] || { echo "mk: run build.sh plan9 first" >&2; exit 1; }
 [ -s "$PLAN9/$objtype/lib.gcc/libbio.a" ] || { echo "mk: no $PLAN9/$objtype/lib.gcc/libbio.a (build the tree)" >&2; exit 1; }
 # the code: no debug info, version strings, notes or unwind tables (the
@@ -35,25 +42,31 @@ for d in sys/src/libbio sys/src/cmd/hoc sys/src/ape/cmd/expr sys/src/libc/$objty
 	git -C "$PLAN9" ls-files -z "$d" | (cd "$PLAN9" && tar -cf - --null -T -) | tar -xf - -C "$E"
 done
 (cd "$E/tests/ref" && ar x "$PLAN9/$objtype/lib.gcc/libbio.a" &&
-	ar x "$PLAN9/$objtype/lib.gcc/libc.a" memmove.o strlen.o setjmp.o &&
-	ar x "$PLAN9/$objtype/lib.gcc/libmp.a" mpvecadd.o mpdigdiv.o &&
-	ar x "$PLAN9/$objtype/lib.gcc/libsec.a" md5block.o sha1block.o)
+	ar x "$PLAN9/$objtype/lib.gcc/libc.a" $(printf '%s.o ' $ASM) &&
+	for d in $MPSEC; do ar x "$PLAN9/$objtype/lib.gcc/${d%%:*}.a" "${d#*:}.o" || exit 1; done)
+# the cross toolchain's objcopy: the host's knows only its own machines
 for o in "$E"/tests/ref/*.o; do
-	objcopy $STRIP "$o"
+	"$TOP/build/$objtype/cross/bin/$TARGET-objcopy" $STRIP "$o"
 done
 
 cmds=(
 	"bind -b /$objtype/gnu/bin /bin"
 	"cd /sys/src/libbio && gccmk install >/tmp/libbio.log >[2=1] && ! ar t /$objtype/lib.gcc/libbio.a | grep -s '\.'$O'$'; if(~ \$status '') echo libbio ok; if not { tail -5 /tmp/libbio.log; echo libbio FAIL }"
 	"bad=0; for(o in *.$O){ objcopy $STRIP \$o /tmp/x.o; cmp -s /tmp/x.o /tests/ref/\`{basename \$o .$O}^.o || { echo differs \$o; bad=1 } }; if(~ \$bad 0) echo samecode ok; if not echo samecode FAIL"
-	"cd /sys/src/libc/$objtype && gccmk memmove.$O strlen.$O setjmp.$O >/tmp/asm.log >[2=1] && bad=0 && for(o in memmove strlen setjmp){ objcopy $STRIP \$o.$O /tmp/x.o; cmp -s /tmp/x.o /tests/ref/\$o.o || bad=1 } && ~ \$bad 0; if(~ \$status '') echo asm ok; if not { tail -5 /tmp/asm.log; echo asm FAIL }"
-	"bad=0; for(d in libmp:mpvecadd libmp:mpdigdiv libsec:md5block libsec:sha1block){ l=\`{echo \$d | sed 's/:.*//'}; o=\`{echo \$d | sed 's/.*://'}; cd /sys/src/\$l/$objtype && gccmk \$o.$O >>/tmp/mpsec.log >[2=1] && objcopy $STRIP \$o.$O /tmp/x.o && cmp -s /tmp/x.o /tests/ref/\$o.o || bad=1 }; if(~ \$bad 0) echo mpsec ok; if not { tail -5 /tmp/mpsec.log; echo mpsec FAIL }"
+	"cd /sys/src/libc/$objtype && gccmk $(printf "%s.$O " $ASM)>/tmp/asm.log >[2=1] && bad=0 && for(o in $ASM){ objcopy $STRIP \$o.$O /tmp/x.o; cmp -s /tmp/x.o /tests/ref/\$o.o || bad=1 } && ~ \$bad 0; if(~ \$status '') echo asm ok; if not { tail -5 /tmp/asm.log; echo asm FAIL }"
+	"bad=0; for(d in $MPSEC){ l=\`{echo \$d | sed 's/:.*//'}; o=\`{echo \$d | sed 's/.*://'}; cd /sys/src/\$l/$objtype && gccmk \$o.$O >>/tmp/mpsec.log >[2=1] && objcopy $STRIP \$o.$O /tmp/x.o && cmp -s /tmp/x.o /tests/ref/\$o.o || bad=1 }; if(~ \$bad 0) echo mpsec ok; if not { tail -5 /tmp/mpsec.log; echo mpsec FAIL }"
 	"cd /sys/src/cmd/hoc && gccmk >/tmp/hoc.log >[2=1] && ~ \`{echo '6*7' | ./$O.out} 42; if(~ \$status '') echo hoc ok; if not { tail -5 /tmp/hoc.log; echo hoc FAIL }"
 	"cd /sys/src/ape/cmd/expr && gccmk >/tmp/expr.log >[2=1] && ~ \`{./$O.out 6 '*' 7} 42; if(~ \$status '') echo expr ok; if not { tail -5 /tmp/expr.log; echo expr FAIL }"
 )
+tests="libbio samecode asm mpsec hoc expr"
+if [ -z "$MPSEC" ]; then
+	tests="libbio samecode asm hoc expr"
+	for i in "${!cmds[@]}"; do case ${cmds[$i]} in *'echo mpsec ok'*) unset 'cmds[i]' ;; esac; done
+fi
 cd "$PLAN9"
 MEM=${MEM:-1024} CMDWAIT=${CMDWAIT:-600} UFS_EXTRA=$E bash scripts/guest/boot-cli.sh "${cmds[@]}" > "$T/log" 2>&1 || true
 tr -d '\r' < "$T/log" > "$TOP/build/$objtype/mk-test.log"
-grep -E '^(libbio|samecode|asm|mpsec|hoc|expr) (ok|FAIL)|^differs' "$TOP/build/$objtype/mk-test.log" || true
-[ "$(grep -cE '^(libbio|samecode|asm|mpsec|hoc|expr) ok' "$TOP/build/$objtype/mk-test.log")" = 6 ] ||
+re="^(${tests// /|})"
+grep -E "$re (ok|FAIL)|^differs" "$TOP/build/$objtype/mk-test.log" || true
+[ "$(grep -cE "$re ok" "$TOP/build/$objtype/mk-test.log")" = "$(echo $tests | wc -w)" ] ||
 	{ echo "mk: not all ok (build/$objtype/mk-test.log)" >&2; exit 1; }

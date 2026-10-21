@@ -8,18 +8,25 @@
 #   native    binutils and gcc that run on 9front  -> out/$objtype
 #   plan9     gccmk: mk with gcc on 9front (plan9/) -> out/$objtype
 #
-# objtype=amd64 (default): x86_64-pc-plan9; objtype=386: i686-pc-plan9.
-# usage: [objtype=386] build.sh stage...    (PLAN9: the 9front tree, default ../9front)
+# objtype=amd64 (default): x86_64-pc-plan9; objtype=386: i686-pc-plan9;
+# objtype=riscv64: riscv64-unknown-plan9.
+# usage: [objtype=386] build.sh stage...    (PLAN9: the 9front tree, default
+#        ../9front; for riscv64 ../9front-riscv, the branch with the port)
 set -e
 TOP=$(cd "$(dirname "$0")" && pwd)
-export PLAN9=${PLAN9:-$(cd "$TOP/../9front" && pwd)}
 export objtype=${objtype:-amd64}
 case $objtype in
 amd64)	TARGET=x86_64-pc-plan9 ARCHCONF=() ;;
 # the tree's 386 code: -march=pentium (386/cflags.json)
 386)	TARGET=i686-pc-plan9 ARCHCONF=(--with-arch=pentium) ;;
+# the tree's riscv64 code (riscv64/cflags.json)
+riscv64)	TARGET=riscv64-unknown-plan9
+	ARCHCONF=(--with-arch=rv64gc --with-abi=lp64d --with-cmodel=medany)
+	[ -n "$PLAN9" ] || [ ! -d "$TOP/../9front-riscv" ] || PLAN9=$TOP/../9front-riscv ;;
 *)	echo "build.sh: objtype=$objtype: no target" >&2; exit 1 ;;
 esac
+export PLAN9=${PLAN9:-$(cd "$TOP/../9front" && pwd)}
+PLAN9=$(cd "$PLAN9" && pwd)
 SRC=$TOP/src
 B=$TOP/build/$objtype
 SYSROOT=$B/sysroot
@@ -81,7 +88,7 @@ compat(){
 # j0, erf, ...): APE programs keep APE's, and there are no duplicates.
 musl(){
 	local o=$1 m=$B/musl a f b dir
-	case $objtype in amd64) a=x86_64 ;; 386) a=i386 ;; esac
+	case $objtype in amd64) a=x86_64 ;; 386) a=i386 ;; riscv64) a=riscv64 ;; esac
 	if [ ! -f "$m/config.mak" ]; then
 		mkdir -p "$m"
 		(cd "$m" && "$SRC/musl/configure" --target=$a CC=$TARGET-gcc --disable-shared) \
@@ -263,7 +270,7 @@ native(){
 	mk native-binutils install install-strip DESTDIR="$OUT"
 	log "native gcc"
 	# AC_C_BIGENDIAN finds no answer in a Canadian build (libdecnumber,
-	# libcpp): x86_64 is little-endian
+	# libcpp): every target is little-endian
 	export ac_cv_c_bigendian=no
 	# libcody assumes sockets on every __unix__; APE's are not POSIX's
 	# (opt-in with _BSD_EXTENSION, int lengths and results)
@@ -287,7 +294,7 @@ native(){
 # links), one argument per line for the wrappers' lib.rc
 plan9(){
 	local d=$OUT/$objtype/gnu/plan9 O
-	case $objtype in amd64) O=6 ;; 386) O=8 ;; esac
+	case $objtype in amd64) O=6 ;; 386) O=8 ;; riscv64) O=j ;; esac
 	log "gccmk"
 	rm -rf "$d"
 	mkdir -p "$d/bin" "$OUT/$objtype/gnu/bin"

@@ -294,3 +294,45 @@ Ziel: libstdc++ mit allem, was es über C99/POSIX findet. Entscheidung: alles in
 - Offen: APEs stdio hat keine Locks (Threads, die ein FILE teilen, müssen sich abstimmen;
   `std::cout` aus mehreren Threads); `_exit`/abort beenden andere Threads nicht; keine Locales
   außer „C“; `<uchar.h>` fehlt.
+
+## riscv64: riscv64-unknown-plan9 (Branch riscv, Tree `../9front-riscv`)
+
+- **gcc-Target aufgeteilt wie bei anderen Systemen:** `gcc/config/plan9.h` hat das System
+  (Include-Pfade, Feature-Makros, Bibliotheken, crtbegin/crtend, `--wrap=main`, gnu17,
+  `SYSTEM_IMPLICIT_EXTERN_C`), `i386/plan9.h` bzw. `riscv/plan9.h` die Maschine
+  (`PLAN9_OBJTYPE`, `PLAN9_CC1_SPEC`, `PLAN9_LINK_SPEC`; x86: `.note.gnu.property`).
+  libgcc: `config/plan9-main.c` und `config/t-plan9` gemeinsam, `i386/t-plan9` nur noch die
+  Unwinder-Ausrichtung. **Für x86 ohne Wirkung:** amd64 und 386 neu gebaut, `-dumpspecs`,
+  C- und C++-Makros, `ape.o`/`eh.o` byte-gleich mit vorher; `tests/cross.sh` 10/10 je.
+  Falle: nach geänderter `config.host` konfiguriert `build.sh` libgcc nicht neu (nur bei
+  anderen configure-Argumenten) → `build/$objtype/cross-gcc/$TARGET/libgcc` löschen.
+- **riscv64-Target:** `config.gcc` `riscv*-*-plan9*` (`elfos.h glibc-stdint.h … riscv/plan9.h
+  plan9.h`, `riscv/t-riscv`, Unwind-Tabellen per Default wie riscv64-linux-gnu); configure
+  `--with-arch=rv64gc --with-abi=lp64d --with-cmodel=medany` wie `riscv64/cflags.json`.
+  `-mno-relax`/`--no-relax` per Default: niemand setzt gp (`__global_pointer$`) — weder
+  9fronts `_main` noch der Kernel, jc nimmt das Register als SB. `char` vorzeichenbehaftet
+  (`DEFAULT_SIGNED_CHAR`, wie jc und `-fsigned-char` im Tree). libgcc wie `riscv*-*-*`
+  (softfp, save-restore) mit crtbegin/crtend. binutils: nichts (die generischen
+  `riscv64*-*-*`-Einträge in config.bfd, ld, gas greifen).
+- compat: `fenv.h` mit fcsr-Werten (musls riscv64 bits), `pthread.c` `rfork`/`runon` in
+  riscv64-Assembler (Nummer und Ergebnis in s0, Argument bei 8(sp), `ecall`; das Kind erbt
+  alle Register außer s0: privtop/t in s1/s2). `string.h` deklariert `strtok_r` (libap hat es,
+  APE nur unter `_REENTRANT_SOURCE` — das brächte APEs Nicht-POSIX-`strerror_r`; gas'
+  `tc-riscv.c` braucht es). gccmk: `lib.rc` kennt riscv64 (O=j); `tests/mk.sh` nimmt das
+  `objcopy` der Cross-Toolchain (das des Hosts kennt riscv64 nicht), vergleicht memmove,
+  strcmp, setjmp; libmp/libsec haben für riscv64 keinen Assembler (mpsec entfällt).
+- Tree (`../9front-riscv`): `riscv64/plan9.ld` sammelt `.init_array` und
+  `.gcc_except_table` wie amd64 (C-Programme linken byte-gleich).
+- **`long double` ist IEEE quad** (128 Bit, Software über libgcc). Tests hatten x87-Werte
+  fest (`%.18Lf` von π, LDBL_MAX-Zeichenkette) → je nach `LDBL_MANT_DIG`. **musl hat für quad
+  kein echtes `expl`, `logl`, `log1pl`** (`TODO: broken implementation to make things
+  compile`, sie rufen die double-Funktion; `atanhl` darüber) — wie bei musl auf riscv64-Linux;
+  `c99math` prüft dort double-Genauigkeit. Offen.
+- Gates: `tests/cross.sh` 10/10, `tests/native.sh` 7/7 (gcc/g++ auf 9front riscv64, Objekte
+  byte-gleich mit dem Cross-Compiler), `tests/mk.sh` 5/5 (riscv64-Gast unter TCG: `MEM=2048
+  CMDWAIT=1800`). Tree mit `TOOLPREFIX=riscv64-unknown-plan9-` gebaut: 817 files ok,
+  **5811 von 5830 Objekten byte-gleich** mit dem Linux-Cross-Build (riscv64-linux-gnu-gcc
+  16.2.1); die 19 anderen: cwfs `conf.o`/`.r.o` (`-DDATE=$(date +%s)`), `virt.o` (bettet
+  bootfs.paq mit Compiler-Version und Zeitstempeln ein).
+- `/riscv64/gnu` 194 MB. Offen: Selbstbau des Trees im riscv64-Gast (unter TCG sehr lang),
+  keine riscv64-ISO.

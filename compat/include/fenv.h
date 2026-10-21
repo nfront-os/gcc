@@ -1,10 +1,29 @@
 /*
  * 9front-gcc: C99's <fenv.h>, which APE lacks; the functions are musl's
- * (libapecompat.a), the types and values those of musl's x86 bits/fenv.h.
+ * (libapecompat.a), the types and values those of musl's bits/fenv.h
+ * for the machine (x86, riscv64).
  */
 #ifndef __9FRONT_GCC_FENV
 #define __9FRONT_GCC_FENV
 
+#ifdef __riscv
+/* fcsr's flags and rounding modes */
+#define FE_INVALID	16
+#define FE_DIVBYZERO	8
+#define FE_OVERFLOW	4
+#define FE_UNDERFLOW	2
+#define FE_INEXACT	1
+
+#define FE_ALL_EXCEPT	31
+
+#define FE_TONEAREST	0
+#define FE_DOWNWARD	2
+#define FE_UPWARD	3
+#define FE_TOWARDZERO	1
+
+typedef unsigned int fexcept_t;
+typedef unsigned int fenv_t;
+#else
 #define FE_INVALID	1
 #define __FE_DENORM	2
 #define FE_DIVBYZERO	4
@@ -40,6 +59,7 @@ typedef struct {
 	unsigned int __mxcsr;
 #endif
 } fenv_t;
+#endif
 
 #define FE_DFL_ENV	((const fenv_t *) -1)
 

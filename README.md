@@ -1,9 +1,10 @@
 # 9front-gcc
 
-GCC 16.2.0 and Binutils 2.47 for 9front amd64 and 386 (targets
-`x86_64-pc-plan9`, `i686-pc-plan9`),
+GCC 16.2.0 and Binutils 2.47 for 9front amd64, 386 and riscv64 (targets
+`x86_64-pc-plan9`, `i686-pc-plan9`, `riscv64-unknown-plan9`),
 built on Linux as a Canadian cross against the gcc-built 9front tree
-(`PLAN9`, default `../9front`). The result, `out/$objtype`, is the tree
+(`PLAN9`, default `../9front`; for riscv64 `../9front-riscv`, the tree's
+branch `riscv`). The result, `out/$objtype`, is the tree
 `/$objtype/gnu` of an installed system; `../9front`'s `scripts/guest/mkiso.sh`
 puts it on the install CD (`scripts/guest/boot/gnuproto`).
 
@@ -18,15 +19,15 @@ Log of the port (German): `NOTES.md`.
     ./build.sh plan9      # gccmk and its wrappers (plan9/), flags from the tree's build -> out/$objtype
     ./build.sh compat     # only the toolchain's additions to APE (compat/, musl) into build/$objtype/cross
 
-`objtype=386` before any of them for 386 (default amd64); build directories
+`objtype=386` or `objtype=riscv64` before any of them for those (default amd64); build directories
 are `build/$objtype`. Needs the 9front tree built for that architecture
 (`CC=gcc ARCH=amd64 sys/src/cmd/build/build.exe`).
 
 ## Tests
 
-    [objtype=386] tests/cross.sh        # cross-compiled C (APE, native Plan 9, compat: c99*.c, pthread.c) and C++ (cxx*.cc, eh.cc) run in the 9front guest
-    [objtype=386] tests/native.sh       # /$objtype/gnu/bin/gcc and g++ compile and run them in the guest; same code as the cross compilers
-    [objtype=386] tests/mk.sh           # gccmk in the guest: libbio, hoc (yacc), ape/cmd/expr (pcc), libc's assembly; same code as the tree's build
+    [objtype=386|riscv64] tests/cross.sh        # cross-compiled C (APE, native Plan 9, compat: c99*.c, pthread.c) and C++ (cxx*.cc, eh.cc) run in the 9front guest
+    [objtype=386|riscv64] tests/native.sh       # /$objtype/gnu/bin/gcc and g++ compile and run them in the guest; same code as the cross compilers
+    [objtype=386|riscv64] tests/mk.sh           # gccmk in the guest: libbio, hoc (yacc), ape/cmd/expr (pcc), libc's assembly; same code as the tree's build
 
 ## Layout
 
