@@ -1140,3 +1140,72 @@ pthread_setspecific(pthread_key_t k, const void *v)
 	t->tsd[k].val = (void *)v;
 	return 0;
 }
+
+int
+pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *a, unsigned count)
+{
+	(void)a;
+	if(count == 0)
+		return EINVAL;
+	pthread_mutex_init(&b->__m, NULL);
+	pthread_cond_init(&b->__c, NULL);
+	b->__count = count;
+	b->__waiting = 0;
+	b->__generation = 0;
+	return 0;
+}
+
+int
+pthread_barrier_destroy(pthread_barrier_t *b)
+{
+	return b->__waiting != 0 ? EBUSY : 0;
+}
+
+/* the last to arrive wakes the others and is the serial thread */
+int
+pthread_barrier_wait(pthread_barrier_t *b)
+{
+	unsigned gen;
+
+	pthread_mutex_lock(&b->__m);
+	gen = b->__generation;
+	if(++b->__waiting == b->__count){
+		b->__waiting = 0;
+		b->__generation++;
+		pthread_cond_broadcast(&b->__c);
+		pthread_mutex_unlock(&b->__m);
+		return PTHREAD_BARRIER_SERIAL_THREAD;
+	}
+	while(gen == b->__generation)
+		pthread_cond_wait(&b->__c, &b->__m);
+	pthread_mutex_unlock(&b->__m);
+	return 0;
+}
+
+int
+pthread_barrierattr_init(pthread_barrierattr_t *a)
+{
+	a->__dummy = 0;
+	return 0;
+}
+
+int
+pthread_barrierattr_destroy(pthread_barrierattr_t *a)
+{
+	(void)a;
+	return 0;
+}
+
+int
+pthread_sigmask(int how, const sigset_t *set, sigset_t *old)
+{
+	return sigprocmask(how, (sigset_t *)set, old) < 0 ? errno : 0;
+}
+
+int
+pthread_getcpuclockid(pthread_t t, clockid_t *id)
+{
+	(void)t;
+	(void)id;
+	return ENOENT;
+}

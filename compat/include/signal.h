@@ -46,3 +46,15 @@ extern int	sigaction(int, const struct sigaction *, struct sigaction *);
 #else
 #include_next <signal.h>
 #endif
+
+/* POSIX's pthread_sigmask (pthread.c): the proc's mask, APE's sigprocmask */
+#ifndef __9FRONT_GCC_PTHREAD_SIGMASK
+#define __9FRONT_GCC_PTHREAD_SIGMASK
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern int	pthread_sigmask(int, const sigset_t *, sigset_t *);
+#ifdef __cplusplus
+}
+#endif
+#endif

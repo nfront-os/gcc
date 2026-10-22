@@ -10,9 +10,12 @@
  * - readlink, symlink (POSIX; APE: bsd.h). libbsd's readlink returns
  *   int, a POSIX caller reads an ssize_t (-1 would arrive as 2^32-1): the
  *   declaration binds to libapecompat's own (no symlinks on 9front).
+ *   Not with an APE that declares them as POSIX has them (its unistd.h
+ *   defines __APE_POSIX_LINKS; libbsd's are then POSIX's).
  * - pread, pwrite, usleep (libapecompat.a).
  * - the POSIX options compat has (_POSIX_TIMERS, _POSIX_THREADS, ...).
- * - sysconf with the number of processors and the page size
+ * - sysconf with the number of processors, the page size and the pages
+ *   of memory
  *   (libapecompat.a: link name __apecompat_sysconf, it asks APE's for
  *   the rest).
  */
@@ -43,6 +46,7 @@
 #define _SC_PAGE_SIZE		_SC_PAGESIZE
 #define _SC_NPROCESSORS_CONF	83
 #define _SC_NPROCESSORS_ONLN	84
+#define _SC_PHYS_PAGES		85
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,7 +55,9 @@ extern int	execv(const char *, char *const *);
 extern int	execve(const char *, char *const *, char *const *);
 extern int	execvp(const char *, char *const *);
 extern int	truncate(const char *, off_t);
+#ifndef __APE_POSIX_LINKS
 extern ssize_t	readlink(const char *, char *, size_t) __asm__("__apecompat_readlink");
+#endif
 extern ssize_t	pread(int, void *, size_t, off_t);
 extern ssize_t	pwrite(int, const void *, size_t, off_t);
 extern int	usleep(useconds_t);
@@ -61,7 +67,9 @@ extern int	getopt(int, char *const *, const char *);
 extern char	*optarg;
 extern int	optind, opterr, optopt;
 extern char	*mktemp(char *);
+#ifndef __APE_POSIX_LINKS
 extern int	symlink(const char *, const char *);
+#endif
 #endif
 #ifdef __cplusplus
 }

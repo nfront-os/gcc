@@ -336,3 +336,30 @@ Ziel: libstdc++ mit allem, was es über C99/POSIX findet. Entscheidung: alles in
   bootfs.paq mit Compiler-Version und Zeitstempeln ein).
 - `/riscv64/gnu` 194 MB. Offen: Selbstbau des Trees im riscv64-Gast (unter TCG sehr lang),
   keine riscv64-ISO.
+
+## Lücken aus dem Mesa-Port (Branch `gpu` des Trees, „9front next generation“)
+
+Beim Cross-Build von Mesas venus (`../9front`, Branch `gpu`, `scripts/mesa`) fielen
+Lücken auf, die bisher im Mesa-Build umgangen wurden. Behoben an der Wurzel; im Tree
+darf auf dem Branch `gpu` 9front-Code geändert werden.
+- **`-pthread`**: Die Specs schluckten es (`%{pthread:}`), der Treiber kannte die Option
+  aber nicht („unrecognized command-line option“). `config/plan9.opt` (`pthread` als
+  `Driver`-Option, dazu `plan9.opt.urls`, die GCC 16 verlangt), `config.gcc`
+  `extra_options` für `*-*-plan9*`.
+- **Link-Reihenfolge**: `LIB_SPEC` legt `-lapecompat -lbsd -lap` in eine Gruppe
+  (`--start-group`): libap ruft libbsd (mkstemp → mktemp) und umgekehrt; unter 9front
+  löst `#pragma lib` das ohne Reihenfolge.
+- **compat**: `readlink`/`symlink` nur noch, wenn APE sie nicht POSIX-gerecht deklariert
+  (APEs `unistd.h` definiert dann `__APE_POSIX_LINKS`; libbsds sind dann POSIX'
+  Signaturen). `sysconf(_SC_PHYS_PAGES)` aus `/dev/swap`. pthread-Barrieren
+  (`pthread_barrier_*`), `pthread_sigmask` (APEs `sigprocmask`), `pthread_getcpuclockid`
+  (ENOENT: keine CPU-Zeit-Uhren).
+- Tree (Branch `gpu`), APE: `int8_t` ist `signed char` (gcc: `char*` und `signed char*`
+  sind verschiedene Typen; gccs eigenes `__INT8_TYPE__` ist ohnehin `signed char`);
+  `posix_memalign`, `aligned_alloc`, `memalign` in `malloc.c` (der ausgerichtete Block
+  liegt in einem von malloc, davor ein Kopf mit Magic `ALIGNED`, dem `free`/`realloc`
+  folgen) — vorher meldete meson `posix_memalign` als vorhanden (gcc kennt das Builtin),
+  APE hatte es nicht; `mkstemp`/`mkstemps` ohne libbsds `mktemp`, unter `_POSIX_SOURCE`
+  deklariert; POSIX-`lstat`, `symlink`, `readlink` (libbsd); `static_assert` (C11) in
+  `assert.h`; `SIGSYS`; `setenv`/`unsetenv`; `localtime_r` & Co. unter `_POSIX_SOURCE`;
+  `putenv` schrieb einen Eintrag hinter das vergrößerte `environ` (n+1 statt n+2).

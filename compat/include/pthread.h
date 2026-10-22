@@ -8,11 +8,13 @@
  *
  * The objects are plain structures, so they need no destroy and can be
  * initialized statically. A semaphore is 32 bits (the kernel's s32int).
+ * Barriers are a mutex, a condition and a count.
  */
 #ifndef __9FRONT_GCC_PTHREAD
 #define __9FRONT_GCC_PTHREAD
 
 #include <sched.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -61,6 +63,18 @@ typedef struct {
 	int	__dummy;
 } pthread_rwlockattr_t;
 
+typedef struct {
+	pthread_mutex_t	__m;
+	pthread_cond_t	__c;
+	unsigned	__count;	/* threads to wait for */
+	unsigned	__waiting;
+	unsigned	__generation;	/* rounds completed */
+} pthread_barrier_t;
+
+typedef struct {
+	int	__dummy;
+} pthread_barrierattr_t;
+
 typedef int pthread_once_t;
 typedef unsigned int pthread_key_t;
 
@@ -81,6 +95,7 @@ enum {
 #define PTHREAD_RWLOCK_INITIALIZER	{ PTHREAD_MUTEX_INITIALIZER, \
 	PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0 }
 #define PTHREAD_ONCE_INIT	0
+#define PTHREAD_BARRIER_SERIAL_THREAD	(-1)
 
 #define PTHREAD_KEYS_MAX	128
 #define PTHREAD_DESTRUCTOR_ITERATIONS	4
@@ -134,6 +149,16 @@ extern int	pthread_rwlock_wrlock(pthread_rwlock_t *);
 extern int	pthread_rwlock_trywrlock(pthread_rwlock_t *);
 extern int	pthread_rwlock_timedwrlock(pthread_rwlock_t *, const struct timespec *);
 extern int	pthread_rwlock_unlock(pthread_rwlock_t *);
+
+extern int	pthread_barrier_init(pthread_barrier_t *, const pthread_barrierattr_t *, unsigned);
+extern int	pthread_barrier_destroy(pthread_barrier_t *);
+extern int	pthread_barrier_wait(pthread_barrier_t *);
+extern int	pthread_barrierattr_init(pthread_barrierattr_t *);
+extern int	pthread_barrierattr_destroy(pthread_barrierattr_t *);
+
+/* signal masks are the proc's (APE's sigprocmask); no CPU-time clocks */
+extern int	pthread_sigmask(int, const sigset_t *, sigset_t *);
+extern int	pthread_getcpuclockid(pthread_t, clockid_t *);
 
 extern int	pthread_key_create(pthread_key_t *, void (*)(void *));
 extern int	pthread_key_delete(pthread_key_t);
