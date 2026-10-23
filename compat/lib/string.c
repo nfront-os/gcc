@@ -1,6 +1,6 @@
 /*
- * POSIX.1-2008 string functions APE lacks: stpcpy, stpncpy, and
- * strndup, which APE's string.h declares but libap does not have.
+ * POSIX string functions APE lacks: stpcpy, stpncpy, strndup, which
+ * APE's string.h declares but libap does not have, and memmem.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -37,4 +37,20 @@ strndup(const char *s, size_t n)
 	memcpy(d, s, l);
 	d[l] = '\0';
 	return d;
+}
+
+void*
+memmem(const void *h, size_t hn, const void *n, size_t nn)
+{
+	const unsigned char *p, *e;
+
+	if(nn == 0)
+		return (void*)h;
+	if(hn < nn)
+		return NULL;
+	e = (const unsigned char*)h + (hn - nn);
+	for(p = h; p <= e; p++)
+		if(*p == *(const unsigned char*)n && memcmp(p, n, nn) == 0)
+			return (void*)p;
+	return NULL;
 }

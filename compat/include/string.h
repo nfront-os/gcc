@@ -4,6 +4,7 @@
  * declares strndup, without const, but has no implementation; its
  * declaration is renamed while APE's header is read) and strcasecmp &
  * co. from <strings.h>, which glibc, musl and the BSDs declare here too.
+ * memmem (POSIX.1-2024, libapecompat.a).
  * strtok_r is libap's; APE declares it only with _REENTRANT_SOURCE, which
  * would bring its non-POSIX strerror_r along.
  */
@@ -20,6 +21,7 @@ extern char	*stpcpy(char *, const char *);
 extern char	*stpncpy(char *, const char *, size_t);
 extern char	*strndup(const char *, size_t);
 extern char	*strtok_r(char *, const char *, char **);
+extern void	*memmem(const void *, size_t, const void *, size_t);
 #ifdef __cplusplus
 }
 #endif

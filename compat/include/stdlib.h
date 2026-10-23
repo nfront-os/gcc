@@ -50,4 +50,8 @@ extern size_t	wcstombs(char *, const wchar_t *, size_t)
 #ifdef __cplusplus
 }
 #endif
+/* alloca, which glibc's <stdlib.h> gives with _GNU_SOURCE or _DEFAULT_SOURCE */
+#if (defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE)) && !defined(alloca)
+#define alloca(n)	__builtin_alloca(n)
+#endif
 #endif
