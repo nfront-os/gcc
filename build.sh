@@ -10,7 +10,7 @@
 # objtype=amd64 (default): x86_64-pc-plan9; objtype=386: i686-pc-plan9;
 # objtype=riscv64: riscv64-unknown-plan9.
 # usage: [objtype=386] build.sh stage...    (BUILD: build directory, default
-#        build; PLAN9: the 9front tree, default
+#        build; OUTDIR: where native and plan9 go, default out; PLAN9: the 9front tree, default
 #        ../9front; for riscv64 ../9front-riscv, the branch with the port)
 set -e
 TOP=$(cd "$(dirname "$0")" && pwd)
@@ -134,7 +134,7 @@ hostlibs(){
 # binutils and gcc that run on 9front, installed as on the system
 # (/$objtype/gnu) under out/$objtype; the cross toolchain compiles them,
 # its libgcc build uses the sysroot's headers (--with-build-sysroot)
-OUT=$TOP/out/$objtype
+OUT=${OUTDIR:-$TOP/out}/$objtype
 native(){
 	local host=(--build=$(cc -dumpmachine) --host=$TARGET --prefix=/$objtype/gnu)
 	log "native binutils"
