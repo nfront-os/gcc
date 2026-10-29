@@ -9,7 +9,8 @@
 #
 # objtype=amd64 (default): x86_64-pc-plan9; objtype=386: i686-pc-plan9;
 # objtype=riscv64: riscv64-unknown-plan9.
-# usage: [objtype=386] build.sh stage...    (PLAN9: the 9front tree, default
+# usage: [objtype=386] build.sh stage...    (BUILD: build directory, default
+#        build; PLAN9: the 9front tree, default
 #        ../9front; for riscv64 ../9front-riscv, the branch with the port)
 set -e
 TOP=$(cd "$(dirname "$0")" && pwd)
@@ -27,7 +28,7 @@ esac
 export PLAN9=${PLAN9:-$(cd "$TOP/../9front" && pwd)}
 PLAN9=$(cd "$PLAN9" && pwd)
 SRC=$TOP/src
-B=$TOP/build/$objtype
+B=${BUILD:-$TOP/build}/$objtype
 SYSROOT=$B/sysroot
 CROSS=$B/cross
 J=${J:-$(nproc)}

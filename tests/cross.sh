@@ -12,7 +12,7 @@ export objtype=${objtype:-amd64}
 [ -n "$PLAN9" ] || [ $objtype != riscv64 ] || [ ! -d "$TOP/../9front-riscv" ] || PLAN9=$TOP/../9front-riscv
 export PLAN9=$(cd "${PLAN9:-$TOP/../9front}" && pwd)
 case $objtype in amd64) TARGET=x86_64-pc-plan9 ;; 386) TARGET=i686-pc-plan9 ;; riscv64) TARGET=riscv64-unknown-plan9 ;; esac
-X=$TOP/build/$objtype/cross/bin/$TARGET
+X=${BUILD:-$TOP/build}/$objtype/cross/bin/$TARGET
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/extra/tests"
@@ -37,8 +37,8 @@ done
 re="^(${tests// /|}) "
 cd "$PLAN9"
 UFS_EXTRA=$T/extra bash "$PLAN9/scripts/guest/boot-cli.sh" "${cmds[@]}" > "$T/log" 2>&1 || true
-tr -d '\r' < "$T/log" > "$TOP/build/$objtype/cross-test.log"
+tr -d '\r' < "$T/log" > "${BUILD:-$TOP/build}/$objtype/cross-test.log"
 # the failures the programs print, then the results
-grep -E "^(${tests// /|}): FAIL" "$TOP/build/$objtype/cross-test.log" || true
-grep -E "$re(ok|FAIL)" "$TOP/build/$objtype/cross-test.log" || { tail -20 "$TOP/build/$objtype/cross-test.log"; exit 1; }
-[ "$(grep -cE "${re}ok" "$TOP/build/$objtype/cross-test.log")" = "$(echo $tests | wc -w)" ]
+grep -E "^(${tests// /|}): FAIL" "${BUILD:-$TOP/build}/$objtype/cross-test.log" || true
+grep -E "$re(ok|FAIL)" "${BUILD:-$TOP/build}/$objtype/cross-test.log" || { tail -20 "${BUILD:-$TOP/build}/$objtype/cross-test.log"; exit 1; }
+[ "$(grep -cE "${re}ok" "${BUILD:-$TOP/build}/$objtype/cross-test.log")" = "$(echo $tests | wc -w)" ]

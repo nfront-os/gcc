@@ -15,7 +15,7 @@ export objtype=${objtype:-amd64}
 [ -n "$PLAN9" ] || [ $objtype != riscv64 ] || [ ! -d "$TOP/../9front-riscv" ] || PLAN9=$TOP/../9front-riscv
 export PLAN9=$(cd "${PLAN9:-$TOP/../9front}" && pwd)
 case $objtype in amd64) TARGET=x86_64-pc-plan9 ;; 386) TARGET=i686-pc-plan9 ;; riscv64) TARGET=riscv64-unknown-plan9 ;; esac
-X=$TOP/build/$objtype/cross/bin/$TARGET
+X=${BUILD:-$TOP/build}/$objtype/cross/bin/$TARGET
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 E=$T/extra
@@ -26,7 +26,7 @@ cp -r "$PLAN9/sys/include" "$E/sys/"
 cp "$TOP"/tests/*.c "$TOP"/tests/*.cc "$E/tests/"
 # the cross compiler's object, as the native one is made
 P9FLAGS="-O2 -nostdinc -I/$objtype/include -I/sys/include -fplan9-extensions -fno-builtin"
-$X-gcc $P9FLAGS --sysroot="$TOP/build/$objtype/sysroot" -c -o "$E/tests/plan9.cross.o" "$TOP/tests/plan9.c" 2>/dev/null ||
+$X-gcc $P9FLAGS --sysroot="${BUILD:-$TOP/build}/$objtype/sysroot" -c -o "$E/tests/plan9.cross.o" "$TOP/tests/plan9.c" 2>/dev/null ||
 	$X-gcc $(echo $P9FLAGS | sed "s|-I/|-I$PLAN9/|g") -c -o "$E/tests/plan9.cross.o" "$TOP/tests/plan9.c"
 $X-objcopy --strip-debug -R .comment "$E/tests/plan9.cross.o"
 $X-g++ -O2 -c -o "$E/tests/eh.cross.o" "$TOP/tests/eh.cc"
@@ -45,7 +45,7 @@ cmds=(
 )
 cd "$PLAN9"
 MEM=${MEM:-1024} CMDWAIT=${CMDWAIT:-900} UFS_EXTRA=$E bash scripts/guest/boot-cli.sh "${cmds[@]}" > "$T/log" 2>&1 || true
-tr -d '\r' < "$T/log" > "$TOP/build/$objtype/native-test.log"
-grep -E '^(ape|plan9|samecode|cxx|eh|samecxx|cxxlib) (ok|FAIL)|^cxxlib: FAIL' "$TOP/build/$objtype/native-test.log" || true
-[ "$(grep -cE '^(ape|plan9|samecode|cxx|eh|samecxx|cxxlib) ok' "$TOP/build/$objtype/native-test.log")" = 7 ] ||
+tr -d '\r' < "$T/log" > "${BUILD:-$TOP/build}/$objtype/native-test.log"
+grep -E '^(ape|plan9|samecode|cxx|eh|samecxx|cxxlib) (ok|FAIL)|^cxxlib: FAIL' "${BUILD:-$TOP/build}/$objtype/native-test.log" || true
+[ "$(grep -cE '^(ape|plan9|samecode|cxx|eh|samecxx|cxxlib) ok' "${BUILD:-$TOP/build}/$objtype/native-test.log")" = 7 ] ||
 	{ echo "native: not all ok (build/$objtype/native-test.log)" >&2; exit 1; }
