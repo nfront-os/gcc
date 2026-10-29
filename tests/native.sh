@@ -20,7 +20,7 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 E=$T/extra
 mkdir -p "$E/$objtype" "$E/sys" "$E/tests"
-cp -r "$TOP/out/$objtype/$objtype/gnu" "$E/$objtype/"
+cp -r "${OUTDIR:-$TOP/out}/$objtype/$objtype/gnu" "$E/$objtype/"
 cp -r "$PLAN9/$objtype/include" "$PLAN9/$objtype/lib.gcc" "$PLAN9/$objtype/plan9.ld" "$E/$objtype/"
 cp -r "$PLAN9/sys/include" "$E/sys/"
 cp "$TOP"/tests/*.c "$TOP"/tests/*.cc "$E/tests/"

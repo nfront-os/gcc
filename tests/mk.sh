@@ -19,7 +19,7 @@ case $objtype in amd64) TARGET=x86_64-pc-plan9 ;; 386) TARGET=i686-pc-plan9 ;; r
 # some (riscv64 none)
 case $objtype in riscv64) ASM="memmove strcmp setjmp" MPSEC= ;;
 *) ASM="memmove strlen setjmp" MPSEC="libmp:mpvecadd libmp:mpdigdiv libsec:md5block libsec:sha1block" ;; esac
-[ -r "$TOP/out/$objtype/$objtype/gnu/plan9/mkfile" ] || { echo "mk: run build.sh plan9 first" >&2; exit 1; }
+[ -r "${OUTDIR:-$TOP/out}/$objtype/$objtype/gnu/plan9/mkfile" ] || { echo "mk: run build.sh plan9 first" >&2; exit 1; }
 [ -s "$PLAN9/$objtype/lib.gcc/libbio.a" ] || { echo "mk: no $PLAN9/$objtype/lib.gcc/libbio.a (build the tree)" >&2; exit 1; }
 # the code: no debug info, version strings, notes or unwind tables (the
 # Linux gcc for i386 makes them, i686-pc-plan9 not)
@@ -29,7 +29,7 @@ trap 'rm -rf "$T"' EXIT
 E=$T/extra
 # /$objtype/lib: where gccmk binds lib.gcc (9front has it, the guest not)
 mkdir -p "$E/$objtype/lib" "$E/sys/src/cmd" "$E/sys/src/ape/cmd" "$E/tests/ref"
-cp -r "$TOP/out/$objtype/$objtype/gnu" "$E/$objtype/"
+cp -r "${OUTDIR:-$TOP/out}/$objtype/$objtype/gnu" "$E/$objtype/"
 cp -r "$PLAN9/$objtype/include" "$PLAN9/$objtype/lib.gcc" "$PLAN9/$objtype/plan9.ld" "$PLAN9/$objtype/mkfile" "$E/$objtype/"
 cp -r "$PLAN9/sys/include" "$E/sys/"
 cp "$PLAN9/sys/src/mkfile.proto" "$E/sys/src/"
