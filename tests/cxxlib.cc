@@ -1,4 +1,4 @@
-// libstdc++ over APE and the toolchain's compat: C99 math and stdio
+// libstdc++ over gcc's APE: C99 math and stdio
 // (to_string, stod, iostreams with long double), wide strings and
 // streams, <complex>, <format>, <chrono>, threads (std::thread, mutex,
 // condition_variable, async, thread_local, shared_mutex). Prints each

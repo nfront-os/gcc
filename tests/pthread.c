@@ -1,4 +1,4 @@
-/* POSIX threads over 9front's procs (libapecompat.a, compat/lib/
+/* POSIX threads over 9front's procs (APE's, sys/src/ape/lib/ap/gnu/
  * pthread.c): create, join, detach, mutexes, conditions, rwlocks, once,
  * keys, per-thread errno, main's stack shared. Prints each failure and
  * "pthread: n failed". */

@@ -363,3 +363,13 @@ darf auf dem Branch `gpu` 9front-Code geändert werden.
   deklariert; POSIX-`lstat`, `symlink`, `readlink` (libbsd); `static_assert` (C11) in
   `assert.h`; `SIGSYS`; `setenv`/`unsetenv`; `localtime_r` & Co. unter `_POSIX_SOURCE`;
   `putenv` schrieb einen Eintrag hinter das vergrößerte `environ` (n+1 statt n+2).
+
+## compat in APE (2026-10-29)
+
+compat (`compat/`, `libapecompat.a`, musl als Quelle) ist in den 9front-Baum gewandert
+(Branch `gcc`): APEs Header haben die gcc-Teile unter `#if defined(__GNUC__)`, die
+Funktionen liegen in `sys/src/ape/lib/ap/gnu`, musls Teilmenge in `sys/src/ape/lib/musl`,
+alles in `libap.a`. Der Treiber linkt `--start-group -lbsd -lap --end-group`, kein
+Tool-Include-Verzeichnis mehr; `build.sh compat` und musl in `sources.txt` sind weg.
+Braucht einen Baum mit diesem APE (`PLAN9`; `gpu` muss `gcc` mergen, `../9front-riscv`
+ebenso). `tests/cross.sh` amd64 gegen den gcc-Worktree: alle 10 grün.

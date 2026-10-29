@@ -3,7 +3,7 @@
 # (../9front's scripts/guest/boot-cli.sh): compile and run tests/ape.c
 # (APE, the driver's defaults), tests/plan9.c (native Plan 9 C), and with
 # g++ tests/cxx.cc, tests/eh.cc and tests/cxxlib.cc (libstdc++,
-# exceptions, threads over the toolchain's compat), and compare the
+# exceptions, threads over APE's pthreads), and compare the
 # objects gcc and g++ make on 9front with the cross compiler's (no
 # debug info, no .comment: the same code). The guest's root has no
 # headers and archives, they come along with the toolchain.

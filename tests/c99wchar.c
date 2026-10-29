@@ -1,4 +1,4 @@
-/* C99's <wchar.h> and <wctype.h> over APE (libapecompat.a): wide I/O
+/* C99's <wchar.h> and <wctype.h> over APE (ap/gnu): wide I/O
  * on APE's FILE in UTF-8, the wide printf and scanf, wcsto*, the
  * string functions, Unicode classification and case mapping. Prints
  * each failure and "c99wchar: n failed". */

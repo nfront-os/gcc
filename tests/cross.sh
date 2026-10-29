@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build tests/*.c, *.cc with the cross toolchain (build/cross) and run
 # them in the 9front guest (../9front's scripts/guest/boot-cli.sh, the
-# programs in /tests): APE and native Plan 9 C, C++ (exceptions), the
-# toolchain's additions to APE (compat/: C99 math, stdio, time, wide
-# characters, pthreads) and libstdc++ over them. Prints one line per
+# programs in /tests): APE and native Plan 9 C, C++ (exceptions), gcc's
+# APE (C99 math, stdio, time, wide characters, pthreads) and libstdc++
+# over it. Prints one line per
 # program: "name ok" or "name FAIL ...". Needs the 9front tree built.
 set -e
 TOP=$(cd "$(dirname "$0")/.." && pwd)

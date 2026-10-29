@@ -1,4 +1,4 @@
-/* C99 <math.h> and <fenv.h> over APE (musl's libm in libapecompat.a):
+/* C99 <math.h> and <fenv.h> over APE (musl's libm in libap.a):
  * float and long double functions, C99's additions, the type-generic
  * macros, rounding modes. Prints each failure, "c99math: n failed".
  * Build with -frounding-math (gcc's FENV_ACCESS: else it moves rint

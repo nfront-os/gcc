@@ -142,10 +142,10 @@ index 000000000..fa488b283
 +
 diff --git a/gcc/config/plan9.h b/gcc/config/plan9.h
 new file mode 100644
-index 000000000..87dd9c3b5
+index 000000000..307195ec3
 --- /dev/null
 +++ b/gcc/config/plan9.h
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,147 @@
 +/* Definitions for 9front (Plan 9) systems.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -199,9 +199,8 @@ index 000000000..87dd9c3b5
 +   comes first, as with pcc; both after the C++ directories (whose
 +   <cstdlib> &c. #include_next the C headers) and before gcc's own, whose
 +   stddef.h, stdarg.h, float.h, limits.h and stdint.h APE has itself.
-+   Before them the tool directory ($prefix/$target/include): the
-+   toolchain's additions to APE (C99 and POSIX.1-2008 errno values,
-+   fpclassify), which #include_next APE's headers.  */
++   What C99, POSIX.1-2008 and C++ need beyond kencc's APE is in APE's
++   headers for gcc (#if defined(__GNUC__)), no tool directory.  */
 +#define SYSTEM_IMPLICIT_EXTERN_C 1
 +
 +#undef INCLUDE_DEFAULTS
@@ -213,7 +212,6 @@ index 000000000..87dd9c3b5
 +      GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT, 1 },				\
 +    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1,			\
 +      GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT, 0 },				\
-+    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 0, 0, 0 },			\
 +    { "/" PLAN9_OBJTYPE "/include/ape", 0, 0, 0, 1, 0 },		\
 +    { "/sys/include/ape", 0, 0, 0, 1, 0 },				\
 +    { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 },				\
@@ -258,14 +256,12 @@ index 000000000..87dd9c3b5
 +
 +/* APE's headers name their libraries with #pragma lib, which gcc
 +   ignores: libbsd (sockets, popen, getopt; only what is used is
-+   linked) and libap.  Before them the toolchain's additions to APE
-+   (libapecompat.a in $prefix/$target/lib: asprintf, ...,
-+   pthreads: -pthread needs nothing more, it is taken and dropped).
-+   The three in a group: they call each other (libap's functions
-+   libbsd's and back, libapecompat both), as #pragma lib leaves
-+   the order to the Plan 9 linker.  */
++   linked) and libap, which has the pthreads too: -pthread needs
++   nothing more, it is taken and dropped.  The two in a group: they
++   call each other (libap's functions libbsd's and back), as #pragma
++   lib leaves the order to the Plan 9 linker.  */
 +#undef LIB_SPEC
-+#define LIB_SPEC "--start-group -lapecompat -lbsd -lap --end-group %{pthread:}"
++#define LIB_SPEC "--start-group -lbsd -lap --end-group %{pthread:}"
 +
 +/* The math functions are in libap too: g++ adds no -lm.  */
 +#undef MATH_LIBRARY
@@ -486,7 +482,7 @@ index 000000000..a4184b764
 +CFLAGS-unwind-sjlj.c += -mincoming-stack-boundary=4
 diff --git a/libgcc/config/plan9-main.c b/libgcc/config/plan9-main.c
 new file mode 100644
-index 000000000..0a1b901c9
+index 000000000..2886d7f3e
 --- /dev/null
 +++ b/libgcc/config/plan9-main.c
 @@ -0,0 +1,77 @@
@@ -539,9 +535,9 @@ index 000000000..0a1b901c9
 +extern int __real_main (int, char **, char **);
 +extern int __wrap_main (int, char **, char **);
 +
-+/* The toolchain's pthreads (libapecompat.a, compat/lib/pthread.c), when
-+   linked: runs main on a stack from malloc, shared memory as the other
-+   threads' stacks (a proc's stack segment is its own).  */
++/* APE's pthreads (libap.a, sys/src/ape/lib/ap/gnu/pthread.c), when
++   linked, or Rust's std: runs main on a stack of shared memory, as the
++   other threads' stacks (a proc's stack segment is its own).  */
 +extern int __plan9_mainstack (int (*) (int, char **, char **), int,
 +			      char **, char **) __attribute__ ((weak));
 +

@@ -1,5 +1,5 @@
 /* POSIX clocks over /dev/bintime, timespec_get, nanosleep, usleep,
- * sched_yield, pread and pwrite (libapecompat.a). Prints each failure
+ * sched_yield, pread and pwrite (APE: ap/gnu). Prints each failure
  * and "c99time: n failed". */
 #include <fcntl.h>
 #include <sched.h>
