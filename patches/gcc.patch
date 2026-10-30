@@ -590,16 +590,13 @@ index ce228dbb3..600312951 100644
 +  return strdup (filename);
  }
 diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
-index bc9dce5e2..71aaa966b 100755
+index bc9dce5e2..7ced44329 100755
 --- a/libstdc++-v3/configure
 +++ b/libstdc++-v3/configure
-@@ -46312,6 +46312,3250 @@ if test "x$ac_cv_func_sockatmark" = xyes; then :
- #define HAVE_SOCKATMARK 1
- _ACEOF
+@@ -46315,6 +46315,3256 @@ _ACEOF
+ fi
+ done
  
-+fi
-+done
-+
 +    ;;
 +  *-plan9*)
 +    # 9front: APE's C library, tested by linking against the sysroot
@@ -3841,23 +3838,32 @@ index bc9dce5e2..71aaa966b 100755
 +#define HAVE_TIMESPEC_GET 1
 +_ACEOF
 +
- fi
- done
- 
-@@ -54156,7 +57400,7 @@ $as_echo "$glibcxx_cv_libbacktrace_atomics" >&6; }
++fi
++done
++
++    # thread-local storage by emutls (gcc --disable-tls: 9front sets no %fs for native
++    # TLS, but __thread works). Without it std::call_once holds one global mutex while
++    # it waits in pthread_once: a nested call_once in the function (LLVM's pass
++    # initializers) deadlocks with a second thread waiting for the outer one.
++    $as_echo "#define HAVE_TLS 1" >>confdefs.h
++
+     ;;
+   *-qnx6.1* | *-qnx6.2*)
+     SECTION_FLAGS='-ffunction-sections -fdata-sections'
+@@ -54156,7 +57406,7 @@ $as_echo "$glibcxx_cv_libbacktrace_atomics" >&6; }
      CXXFLAGS='-O0 -S'
  
      cat > conftest.$ac_ext << EOF
 -#line 54159 "configure"
-+#line 57403 "configure"
++#line 57409 "configure"
  #include <stddef.h>
  int main()
  {
 diff --git a/libstdc++-v3/crossconfig.m4 b/libstdc++-v3/crossconfig.m4
-index b3269cb88..0c0e4735d 100644
+index b3269cb88..b3d5d8949 100644
 --- a/libstdc++-v3/crossconfig.m4
 +++ b/libstdc++-v3/crossconfig.m4
-@@ -219,6 +219,15 @@ case "${host}" in
+@@ -219,6 +219,20 @@ case "${host}" in
      AC_CHECK_FUNCS(timespec_get)
      AC_CHECK_FUNCS(sockatmark)
      ;;
@@ -3869,6 +3875,11 @@ index b3269cb88..0c0e4735d 100644
 +    GLIBCXX_CHECK_STDLIB_SUPPORT
 +    AC_CHECK_FUNCS(aligned_alloc posix_memalign memalign)
 +    AC_CHECK_FUNCS(timespec_get)
++    # thread-local storage by emutls (gcc --disable-tls: 9front sets no %fs for native
++    # TLS, but __thread works). Without it std::call_once holds one global mutex while
++    # it waits in pthread_once: a nested call_once in the function (LLVM's pass
++    # initializers) deadlocks with a second thread waiting for the outer one.
++    AC_DEFINE(HAVE_TLS)
 +    ;;
    *-qnx6.1* | *-qnx6.2*)
      SECTION_FLAGS='-ffunction-sections -fdata-sections'
