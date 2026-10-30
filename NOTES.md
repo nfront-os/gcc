@@ -383,3 +383,14 @@ Typen gleicher Größe, gcc 14 lehnt einen `uintptr_t *` für einen `size_t *` a
 `INTPTR_TYPE`/`UINTPTR_TYPE` `long`, wie size_t und u.h's `uintptr`; keine ABI-Änderung.
 APEs `inttypes.h` (Branch gcc) gibt PRI*PTR dafür `l` (unter `__plan9__`). Toolchain im
 eigenen Bauverzeichnis (`BUILD=build-gcc`, gegen ../9front-gccwt); `tests/cross.sh` 386: 10/10.
+
+## Threads: GTHREAD_USE_WEAK 0 (2026-10-30)
+
+libgccs gthr-posix prüft über einen schwachen Verweis auf `pthread_cancel`, ob ein Programm
+Threads hat (`__gthread_active_p`). Ein schwacher Verweis zieht aber kein Objekt aus
+`libap.a`: in einem Rust-Programm (eigene rfork-Procs, kein APE-pthread) war er 0, die
+Mutexe des Unwinders (FDE-Listen, unwind-dw2-fde) taten nichts. Gleichzeitige Panics in
+mehreren Threads (Rusts std-Tests mit 12 Test-Threads) brachen Phase 2 ab (`abort`), das
+Programm hing. `gcc/config/plan9.h`: `GTHREAD_USE_WEAK 0` wie darwin.h und cygwin.h; APEs
+pthreads sind fester Teil von libap, ihre Mutexe gehen für jeden Proc (`pthread_self` kennt
+std's Procs). libstdc++ (`config/os/generic`) hatte `_GLIBCXX_GTHREAD_USE_WEAK 0` schon.

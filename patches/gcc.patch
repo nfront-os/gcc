@@ -151,10 +151,10 @@ index 000000000..fa488b283
 +
 diff --git a/gcc/config/plan9.h b/gcc/config/plan9.h
 new file mode 100644
-index 000000000..307195ec3
+index 000000000..37c0b93b5
 --- /dev/null
 +++ b/gcc/config/plan9.h
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,155 @@
 +/* Definitions for 9front (Plan 9) systems.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -201,6 +201,14 @@ index 000000000..307195ec3
 +	builtin_define ("_Noreturn=__attribute__((__noreturn__))"); \
 +    }						\
 +  while (0)
++
++/* Threads: APE's pthreads are part of libap, always there; there is no
++   libpthread whose presence a weak reference could tell (it links nothing).
++   With the weak test a Rust program (procs of its own, no APE thread)
++   had __gthread_active_p 0, the unwinder's FDE lists went unlocked, and
++   panics in several threads at once broke the unwinder's phase 2.  As
++   darwin.h and cygwin.h.  */
++#define GTHREAD_USE_WEAK 0
 +
 +/* APE's headers know nothing of C++ (some have no extern "C"): the
 +   system directories are not cxx_aware and SYSTEM_IMPLICIT_EXTERN_C is
