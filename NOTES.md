@@ -373,3 +373,13 @@ alles in `libap.a`. Der Treiber linkt `--start-group -lbsd -lap --end-group`, ke
 Tool-Include-Verzeichnis mehr; `build.sh compat` und musl in `sources.txt` sind weg.
 Braucht einen Baum mit diesem APE (`PLAN9`; `gpu` muss `gcc` mergen, `../9front-riscv`
 ebenso). `tests/cross.sh` amd64 gegen den gcc-Worktree: alle 10 grün.
+
+## 386: intptr_t wie size_t (2026-10-30)
+
+i686-pc-plan9 hatte `size_t`/`ptrdiff_t` `(unsigned) long` (gccs Standard, wie Plan 9s
+`usize`), aber `intptr_t`/`uintptr_t` `(unsigned) int` (glibc-stdint.h für 32 Bit): zwei
+Typen gleicher Größe, gcc 14 lehnt einen `uintptr_t *` für einen `size_t *` ab (curls
+`rustls.c` gegen rustls-ffi, beim Bau von cargo für 386 in 9front-rust). `i386/plan9-386.h`:
+`INTPTR_TYPE`/`UINTPTR_TYPE` `long`, wie size_t und u.h's `uintptr`; keine ABI-Änderung.
+APEs `inttypes.h` (Branch gcc) gibt PRI*PTR dafür `l` (unter `__plan9__`). Toolchain im
+eigenen Bauverzeichnis (`BUILD=build-gcc`, gegen ../9front-gccwt); `tests/cross.sh` 386: 10/10.

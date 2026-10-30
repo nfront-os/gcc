@@ -70,10 +70,10 @@ index 743421768..a2620cacc 100644
  	case ${target} in
 diff --git a/gcc/config/i386/plan9-386.h b/gcc/config/i386/plan9-386.h
 new file mode 100644
-index 000000000..c71cf07f2
+index 000000000..a319037f0
 --- /dev/null
 +++ b/gcc/config/i386/plan9-386.h
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,36 @@
 +/* Definitions for 386 9front (Plan 9) systems, before i386/plan9.h.
 +   Copyright (C) 2026 Free Software Foundation, Inc.
 +
@@ -101,6 +101,15 @@ index 000000000..c71cf07f2
 +   --with-arch=pentium as the tree's -march=pentium.  */
 +#define PLAN9_CC1_SPEC \
 +  "%{!mincoming-stack-boundary=*:-mincoming-stack-boundary=2}"
++
++/* intptr_t and uintptr_t as size_t and ptrdiff_t, long (gcc's default
++   SIZE_TYPE, not glibc-stdint.h's int for 32 bits): one type, as on
++   most systems (code passes a uintptr_t * for a size_t *), and as the
++   tree's <u.h> has uintptr.  The same size: no change of the ABI.  */
++#undef INTPTR_TYPE
++#define INTPTR_TYPE "long int"
++#undef UINTPTR_TYPE
++#define UINTPTR_TYPE "long unsigned int"
 diff --git a/gcc/config/i386/plan9.h b/gcc/config/i386/plan9.h
 new file mode 100644
 index 000000000..fa488b283
