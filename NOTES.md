@@ -337,6 +337,26 @@ Ziel: libstdc++ mit allem, was es über C99/POSIX findet. Entscheidung: alles in
 - `/riscv64/gnu` 194 MB. Offen: Selbstbau des Trees im riscv64-Gast (unter TCG sehr lang),
   keine riscv64-ISO.
 
+## arm64: aarch64-pc-plan9 (2026-10-31, für 9front-rust)
+
+- binutils: `aarch64-*-plan9*` in config.bfd, gas/configure.tgt, ld/configure.tgt (die
+  ELF-Einträge, Emulation aarch64elf).
+- gcc: `config.gcc` `aarch64*-*-plan9*` (`elfos.h glibc-stdint.h aarch64-elf.h aarch64-errata.h
+  aarch64/plan9.h plan9.h`, `aarch64/t-aarch64`, Unwind-Tabellen per Default wie
+  aarch64-linux-gnu). `aarch64/plan9.h`: `PLAN9_OBJTYPE "arm64"`, `char` vorzeichenbehaftet
+  (7c, `-fsigned-char` des Trees), `-mno-outline-atomics` per Default (deren Helfer wählen LSE
+  über getauxval, das Plan 9 nicht hat; der Tree baut so). libgcc: aarch64-t-aarch64, softfp
+  (`long double` ist quad), crtfm, **`aarch64/t-crtstuff`** (neu, wie riscv: crt*.o ohne
+  Unwind-Tabellen, sonst zeigt `__EH_FRAME_BEGIN__` auf crtbegins eigene .eh_frame und der
+  Unwinder findet die des Programms nicht: C++-Exceptions endeten in terminate), kein t-lse.
+  `build.sh`/Tests: `objtype=arm64`, gccmk O=7.
+- Tree (gcc-Branch): `arm64/plan9.ld` sammelt `.init_array` und `.gcc_except_table` wie amd64
+  (ohne lief `frame_dummy` nie); C-Programme bleiben byte-gleich. `/sys/include/ape/fenv.h` hatte
+  für arm64 die x87-Werte (FE_UPWARD 0x800 statt fpcrs 0x400000): fesetround wies die
+  Rundungsmodi ab.
+- `tests/cross.sh` arm64 10/10 (Gast unter TCG, ein Prozessor). Noch nicht: native (gcc auf
+  9front arm64), gccmk.
+
 ## Lücken aus dem Mesa-Port (Branch `gpu` des Trees, „9front next generation“)
 
 Beim Cross-Build von Mesas venus (`../9front`, Branch `gpu`, `scripts/mesa`) fielen

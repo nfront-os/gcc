@@ -14,7 +14,7 @@ export objtype=${objtype:-amd64}
 # riscv64: the branch with the port, beside the tree
 [ -n "$PLAN9" ] || [ $objtype != riscv64 ] || [ ! -d "$TOP/../9front-riscv" ] || PLAN9=$TOP/../9front-riscv
 export PLAN9=$(cd "${PLAN9:-$TOP/../9front}" && pwd)
-case $objtype in amd64) TARGET=x86_64-pc-plan9 ;; 386) TARGET=i686-pc-plan9 ;; riscv64) TARGET=riscv64-unknown-plan9 ;; esac
+case $objtype in amd64) TARGET=x86_64-pc-plan9 ;; 386) TARGET=i686-pc-plan9 ;; riscv64) TARGET=riscv64-unknown-plan9 ;; arm64) TARGET=aarch64-pc-plan9 ;; esac
 X=${BUILD:-$TOP/build}/$objtype/cross/bin/$TARGET
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT

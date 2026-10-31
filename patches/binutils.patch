@@ -1,7 +1,16 @@
 diff --git a/bfd/config.bfd b/bfd/config.bfd
-index 02a1a685..3fd65c7d 100644
+index 02a1a685..f6247fa6 100644
 --- a/bfd/config.bfd
 +++ b/bfd/config.bfd
+@@ -249,7 +249,7 @@ case "${targ}" in
+     targ_archs="$targ_archs bfd_i386_arch bfd_powerpc_arch bfd_rs6000_arch"
+     want64=true
+     ;;
+-  aarch64-*-elf | aarch64-*-linux* | aarch64-*-netbsd* | aarch64-*-gnu* | aarch64-*-nto* | aarch64-*-rtems* | aarch64-*-genode*)
++  aarch64-*-elf | aarch64-*-linux* | aarch64-*-netbsd* | aarch64-*-gnu* | aarch64-*-nto* | aarch64-*-rtems* | aarch64-*-genode* | aarch64-*-plan9*)
+     targ_defvec=aarch64_elf64_le_vec
+     targ_selvecs="aarch64_elf64_be_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_le_vec arm_elf32_be_vec aarch64_pei_le_vec aarch64_pe_le_vec"
+     want64=true
 @@ -558,7 +558,7 @@ case "${targ}" in
      targ_selvecs="i386_elf32_vec i386_coff_vec"
      targ_archs="$targ_archs bfd_iamcu_arch"
@@ -21,10 +30,18 @@ index 02a1a685..3fd65c7d 100644
      targ_selvecs="i386_elf32_vec x86_64_elf32_vec"
      want64=true
 diff --git a/gas/configure.tgt b/gas/configure.tgt
-index 7a5645fd..51c281b9 100644
+index 7a5645fd..c6ed5a8a 100644
 --- a/gas/configure.tgt
 +++ b/gas/configure.tgt
-@@ -229,6 +229,7 @@ case ${generic_target} in
+@@ -130,6 +130,7 @@ case ${generic_target} in
+   aarch64*-*-fuchsia*)			fmt=elf;;
+   aarch64*-*-haiku*)			fmt=elf em=haiku ;;
+   aarch64*-*-genode*)			fmt=elf;;
++  aarch64*-*-plan9*)			fmt=elf;;
+   aarch64*-*-linux*)			fmt=elf em=linux
+     case ${cpu}-${os} in
+       aarch64*-linux-gnu_ilp32)		arch=aarch64:32 ;;
+@@ -229,6 +230,7 @@ case ${generic_target} in
    i386-*-beos*)				fmt=elf ;;
    i386-*-elfiamcu)			fmt=elf arch=iamcu ;;
    i386-*-elf*)				fmt=elf ;;
@@ -33,9 +50,18 @@ index 7a5645fd..51c281b9 100644
    i386-*-haiku*)			fmt=elf em=haiku ;;
    i386-*-genode*)			fmt=elf ;;
 diff --git a/ld/configure.tgt b/ld/configure.tgt
-index 60b62e69..a9dccd6a 100644
+index 60b62e69..6b92a76d 100644
 --- a/ld/configure.tgt
 +++ b/ld/configure.tgt
+@@ -85,7 +85,7 @@ case "${targ}" in
+ aarch64_be-*-elf)	targ_emul=aarch64elfb
+ 			targ_extra_emuls="aarch64elf aarch64elf32 aarch64elf32b armelfb armelf"
+ 			;;
+-aarch64-*-elf | aarch64-*-rtems* | aarch64-*-genode*)
++aarch64-*-elf | aarch64-*-rtems* | aarch64-*-genode* | aarch64-*-plan9*)
+ 			targ_emul=aarch64elf
+ 			targ_extra_emuls="aarch64elf32 aarch64elf32b aarch64elfb armelf armelfb"
+ 			;;
 @@ -379,7 +379,7 @@ i[3-6]86-*-phoenix*)
  i[3-7]86-*-elfiamcu)	targ_emul=elf_iamcu
  			targ_extra_emuls=elf_i386

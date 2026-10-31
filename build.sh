@@ -8,7 +8,7 @@
 #   plan9     gccmk: mk with gcc on 9front (plan9/) -> out/$objtype
 #
 # objtype=amd64 (default): x86_64-pc-plan9; objtype=386: i686-pc-plan9;
-# objtype=riscv64: riscv64-unknown-plan9.
+# objtype=riscv64: riscv64-unknown-plan9; objtype=arm64: aarch64-pc-plan9.
 # usage: [objtype=386] build.sh stage...    (BUILD: build directory, default
 #        build; OUTDIR: where native and plan9 go, default out; PLAN9: the 9front tree, default
 #        ../9front; for riscv64 ../9front-riscv, the branch with the port)
@@ -23,6 +23,8 @@ amd64)	TARGET=x86_64-pc-plan9 ARCHCONF=() ;;
 riscv64)	TARGET=riscv64-unknown-plan9
 	ARCHCONF=(--with-arch=rv64gc --with-abi=lp64d --with-cmodel=medany)
 	[ -n "$PLAN9" ] || [ ! -d "$TOP/../9front-riscv" ] || PLAN9=$TOP/../9front-riscv ;;
+# the tree's arm64 code (arm64/cflags.json: armv8-a, signed char, no outline atomics)
+arm64)	TARGET=aarch64-pc-plan9 ARCHCONF=() ;;
 *)	echo "build.sh: objtype=$objtype: no target" >&2; exit 1 ;;
 esac
 export PLAN9=${PLAN9:-$(cd "$TOP/../9front" && pwd)}
@@ -166,7 +168,7 @@ native(){
 # links), one argument per line for the wrappers' lib.rc
 plan9(){
 	local d=$OUT/$objtype/gnu/plan9 O
-	case $objtype in amd64) O=6 ;; 386) O=8 ;; riscv64) O=j ;; esac
+	case $objtype in amd64) O=6 ;; 386) O=8 ;; riscv64) O=j ;; arm64) O=7 ;; esac
 	log "gccmk"
 	rm -rf "$d"
 	mkdir -p "$d/bin" "$OUT/$objtype/gnu/bin"

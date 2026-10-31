@@ -18,7 +18,7 @@ index c818a0802..d48f99d41 100644
        /* If preprocessing assembly language, accept any of the C-family
  	 front end options since the driver may pass them through.  */
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index 743421768..a2620cacc 100644
+index 743421768..3f81db7b0 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
 @@ -1063,6 +1063,12 @@ case ${target} in
@@ -34,7 +34,24 @@ index 743421768..a2620cacc 100644
  *-*-phoenix*)
    gas=yes
    gnu_ld=yes
-@@ -2373,6 +2379,16 @@ i[34567]86-*-mingw* | x86_64-*-mingw*)
+@@ -1280,6 +1286,16 @@ aarch64*-*-freebsd*)
+ 	tmake_file="${tmake_file} aarch64/t-aarch64 aarch64/t-aarch64-freebsd"
+ 	tm_defines="${tm_defines}  TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
+ 	;;
++aarch64*-*-plan9*)
++	tm_file="${tm_file} elfos.h glibc-stdint.h"
++	tm_file="${tm_file} aarch64/aarch64-elf.h aarch64/aarch64-errata.h aarch64/plan9.h plan9.h"
++	tmake_file="${tmake_file} aarch64/t-aarch64"
++	# unwind tables in every function, as aarch64-linux-gnu
++	tm_defines="${tm_defines} TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
++	gnu_ld=yes
++	gas=yes
++	gcc_cv_initfini_array=yes
++	;;
+ aarch64*-*-netbsd*)
+ 	tm_file="${tm_file} elfos.h ${nbsd_tm_file}"
+ 	tm_file="${tm_file} aarch64/aarch64-elf.h aarch64/aarch64-errata.h aarch64/aarch64-netbsd.h"
+@@ -2373,6 +2389,16 @@ i[34567]86-*-mingw* | x86_64-*-mingw*)
  			;;
  	esac
  	;;
@@ -51,7 +68,7 @@ index 743421768..a2620cacc 100644
  x86_64-*-fuchsia*)
  	tmake_file="${tmake_file} i386/t-x86_64-elf"
  	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h i386/x86-64.h fuchsia.h"
-@@ -2610,6 +2626,16 @@ riscv*-*-gnu*)
+@@ -2610,6 +2636,16 @@ riscv*-*-gnu*)
  	# automatically detect that GAS supports it, yet we require it.
  	gcc_cv_initfini_array=yes
  	;;
@@ -68,6 +85,44 @@ index 743421768..a2620cacc 100644
  riscv*-*-elf* | riscv*-*-rtems*)
  	tm_file="elfos.h newlib-stdint.h ${tm_file} riscv/elf.h"
  	case ${target} in
+diff --git a/gcc/config/aarch64/plan9.h b/gcc/config/aarch64/plan9.h
+new file mode 100644
+index 000000000..10e56378d
+--- /dev/null
++++ b/gcc/config/aarch64/plan9.h
+@@ -0,0 +1,32 @@
++/* Definitions for AArch64 9front (Plan 9) systems, before plan9.h.
++   Copyright (C) 2026 Free Software Foundation, Inc.
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 3, or (at your option)
++any later version.
++
++GCC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING3.  If not see
++<http://www.gnu.org/licenses/>.  */
++
++/* arm64 9front: the flags of the tree's build (arm64/cflags.json).  */
++
++#define PLAN9_OBJTYPE "arm64"
++
++/* No outline atomics: their helpers choose LSE at startup through
++   getauxval (HWCAP), which Plan 9 does not have; the tree compiles
++   -mno-outline-atomics.  An explicit -moutline-atomics wins.  */
++#define PLAN9_CC1_SPEC "%{!moutline-atomics:-mno-outline-atomics}"
++
++/* char is signed, as with 9front's compilers (7c) and the tree's
++   -fsigned-char.  */
++#undef DEFAULT_SIGNED_CHAR
++#define DEFAULT_SIGNED_CHAR 1
 diff --git a/gcc/config/i386/plan9-386.h b/gcc/config/i386/plan9-386.h
 new file mode 100644
 index 000000000..a319037f0
@@ -457,10 +512,27 @@ index 9234ead0d..6f5234e4e 100644
    /* In the case of a normal #include, we're now at the start of the
       line *following* the #include.  A separate location_t for this
 diff --git a/libgcc/config.host b/libgcc/config.host
-index ac10ccc43..d2250b352 100644
+index ac10ccc43..0bcf5b576 100644
 --- a/libgcc/config.host
 +++ b/libgcc/config.host
-@@ -754,6 +754,12 @@ x86_64-*-elf* | x86_64-*-rtems*)
+@@ -408,6 +408,16 @@ aarch64*-*-freebsd*)
+ 	md_unwind_def_header=aarch64/aarch64-unwind-def.h
+ 	md_unwind_header=aarch64/freebsd-unwind.h
+ 	;;
++aarch64*-*-plan9*)
++	# crtbegin.o registers .eh_frame for the unwinder (C++ exceptions):
++	# there is no dl_iterate_phdr; static, so no PIC.  No t-lse: no
++	# outline atomics (aarch64/plan9.h)
++	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
++	tmake_file="${tmake_file} ${cpu_type}/t-softfp t-softfp t-crtfm ${cpu_type}/t-crtstuff t-plan9"
++	extra_parts="crtbegin.o crtend.o crtfastmath.o"
++	md_unwind_def_header=aarch64/aarch64-unwind-def.h
++	md_unwind_header=aarch64/aarch64-unwind.h
++	;;
+ aarch64*-*-netbsd*)
+ 	extra_parts="$extra_parts crtfastmath.o"
+ 	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
+@@ -754,6 +764,12 @@ x86_64-*-elf* | x86_64-*-rtems*)
  	    ;;
  	esac
  	;;
@@ -473,7 +545,7 @@ index ac10ccc43..d2250b352 100644
  x86_64-*-fuchsia*)
  	tmake_file="$tmake_file t-libgcc-pic"
  	;;
-@@ -1352,6 +1358,12 @@ riscv*-*-linux*)
+@@ -1352,6 +1368,12 @@ riscv*-*-linux*)
  	extra_parts="$extra_parts crtbegin.o crtend.o crti.o crtn.o crtendS.o crtbeginT.o"
  	md_unwind_header=riscv/linux-unwind.h
  	;;
@@ -486,6 +558,18 @@ index ac10ccc43..d2250b352 100644
  riscv*-*-freebsd*)
  	tmake_file="${tmake_file} riscv/t-crtstuff riscv/t-softfp${host_address} t-softfp riscv/t-elf riscv/t-elf${host_address} t-slibgcc-libgcc"
  	extra_parts="$extra_parts crtbegin.o crtend.o crti.o crtn.o crtendS.o crtbeginT.o"
+diff --git a/libgcc/config/aarch64/t-crtstuff b/libgcc/config/aarch64/t-crtstuff
+new file mode 100644
+index 000000000..64b57f511
+--- /dev/null
++++ b/libgcc/config/aarch64/t-crtstuff
+@@ -0,0 +1,6 @@
++# 9front (aarch64-pc-plan9): unwind tables are on by default (as for
++# aarch64-linux-gnu); not for crt*.o, as riscv/t-crtstuff: else
++# __EH_FRAME_BEGIN__ points to crtbegin.o's own .eh_frame data instead of
++# the program's when it is linked statically, and crtbegin.o registers
++# .eh_frame from there for the unwinder (no PT_GNU_EH_FRAME lookup).
++CRTSTUFF_T_CFLAGS += -fno-asynchronous-unwind-tables -fno-unwind-tables
 diff --git a/libgcc/config/i386/t-plan9 b/libgcc/config/i386/t-plan9
 new file mode 100644
 index 000000000..a4184b764
