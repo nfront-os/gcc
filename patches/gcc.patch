@@ -85,6 +85,19 @@ index 743421768..3f81db7b0 100644
  riscv*-*-elf* | riscv*-*-rtems*)
  	tm_file="elfos.h newlib-stdint.h ${tm_file} riscv/elf.h"
  	case ${target} in
+diff --git a/gcc/config.host b/gcc/config.host
+index 8b809a8d5..de8607f65 100644
+--- a/gcc/config.host
++++ b/gcc/config.host
+@@ -100,7 +100,7 @@ esac
+ 
+ case ${host} in
+   aarch64*-*-freebsd* | aarch64*-*-linux* | aarch64*-*-fuchsia* |\
+-  aarch64*-*-darwin*)
++  aarch64*-*-darwin* | aarch64*-*-plan9*)
+     case ${target} in
+       aarch64*-*-*)
+ 	host_extra_gcc_objs="driver-aarch64.o"
 diff --git a/gcc/config/aarch64/plan9.h b/gcc/config/aarch64/plan9.h
 new file mode 100644
 index 000000000..10e56378d

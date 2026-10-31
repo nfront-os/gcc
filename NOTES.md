@@ -354,8 +354,11 @@ Ziel: libstdc++ mit allem, was es über C99/POSIX findet. Entscheidung: alles in
   (ohne lief `frame_dummy` nie); C-Programme bleiben byte-gleich. `/sys/include/ape/fenv.h` hatte
   für arm64 die x87-Werte (FE_UPWARD 0x800 statt fpcrs 0x400000): fesetround wies die
   Rundungsmodi ab.
-- `tests/cross.sh` arm64 10/10 (Gast unter TCG, ein Prozessor). Noch nicht: native (gcc auf
-  9front arm64), gccmk.
+- `tests/cross.sh` arm64 10/10 (Gast unter TCG, ein Prozessor).
+- **nativ** (`build.sh hostlibs native plan9`, `/arm64/gnu` 148 MB): gcc auf einem aarch64-Host
+  bindet `host_detect_local_cpu` ein (`-mcpu=native`), `driver-aarch64.o` aber nur für bekannte
+  Hosts: `gcc/config.host` nimmt `aarch64*-*-plan9*` dazu (es liest `/proc/cpuinfo`; fehlt die,
+  erkennt `-mcpu=native` nichts). Linker für rustc auf 9front arm64 (9front-rust).
 
 ## Lücken aus dem Mesa-Port (Branch `gpu` des Trees, „9front next generation“)
 
