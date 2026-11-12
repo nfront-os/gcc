@@ -8,7 +8,7 @@ branch `riscv`). The result, `out/$objtype`, is the tree
 `/$objtype/gnu` of an installed system; `../9front`'s `scripts/guest/mkiso.sh`
 puts it on the install CD (`scripts/guest/boot/gnuproto`).
 
-Log of the port (German): `NOTES.md`.
+Log of the port: `NOTES.md`.
 
 ## Build
 

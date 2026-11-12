@@ -1,419 +1,419 @@
 # 9front-gcc — Log
 
-Ziel: GCC 16.2.0 + Binutils 2.47 laufen nativ auf 9front amd64, liegen auf der ISO,
-und das System baut sich im Gast selbst (Plan: Phasen 1–6, README.md).
+Goal: GCC 16.2.0 + Binutils 2.47 run natively on 9front amd64, are on the ISO,
+and the system builds itself in the guest (plan: phases 1–6, README.md).
 
-## Target x86_64-pc-plan9 (Phase 1)
+## Target x86_64-pc-plan9 (phase 1)
 
-- `config.sub` kennt `plan9*` schon (gcc und binutils).
+- `config.sub` already knows `plan9*` (gcc and binutils).
 - binutils: `bfd/config.bfd` (x86_64_elf64_vec), `ld/configure.tgt` (elf_x86_64),
-  `gas/configure.tgt` (`i386-*-plan9*` → fmt=elf). Sonst nichts: gcc übergibt `-T plan9.ld`.
+  `gas/configure.tgt` (`i386-*-plan9*` → fmt=elf). Nothing else: gcc passes `-T plan9.ld`.
 - gcc: `config.gcc` (`*-*-plan9*`: gas, gnu_ld, native_system_header_dir=/sys/include/ape;
-  `x86_64-*-plan9*`: tm_file wie x86_64-elf, aber `glibc-stdint.h` wie Linux, + `i386/plan9.h`).
+  `x86_64-*-plan9*`: tm_file like x86_64-elf, but `glibc-stdint.h` like Linux, + `i386/plan9.h`).
 - `i386/plan9.h`:
-  - Codegen = x86_64-linux-gnu bei gleichen Optionen (kein default PIE/SSP — der Tree
-    übergibt `-fno-pie -fno-stack-protector` ohnehin). Builtins `__plan9__`, `__unix__`/`unix`
-    (der Linux-gcc definiert `__unix__` auch; `__linux__` prüft im Tree nur PPC-/Fremdcode).
-  - `INCLUDE_DEFAULTS`: C++-Verzeichnisse, `/amd64/include/ape`, `/sys/include/ape`, dann gccs
-    eigenes. APE-Verzeichnisse sind nicht `cxx_aware` → cpp wickelt sie in `extern "C"` (APE-Header
-    haben keine `__cplusplus`-Guards; kein Wrapper-Verzeichnis nötig). Sie stehen nach den
-    C++-Verzeichnissen, weil `<cstdlib>` & Co. `#include_next <stdlib.h>` machen.
-  - Bibliotheken über `STANDARD_STARTFILE_PREFIX_1/2` (`/amd64/lib.gcc/ape/`, `/amd64/lib.gcc/`,
-    sysroot-relativ, nach den `-L` des Nutzers); `LIB_SPEC -lap`; keine crt-Dateien
-    (`_main` steckt in libap/libc).
+  - Codegen = x86_64-linux-gnu with the same options (no default PIE/SSP — the tree
+    passes `-fno-pie -fno-stack-protector` anyway). Builtins `__plan9__`, `__unix__`/`unix`
+    (the Linux gcc defines `__unix__` too; `__linux__` is checked in the tree only by PPC/foreign code).
+  - `INCLUDE_DEFAULTS`: C++ directories, `/amd64/include/ape`, `/sys/include/ape`, then gcc's
+    own. APE directories are not `cxx_aware` → cpp wraps them in `extern "C"` (APE headers
+    have no `__cplusplus` guards; no wrapper directory needed). They come after the
+    C++ directories because `<cstdlib>` & co. do `#include_next <stdlib.h>`.
+  - Libraries via `STANDARD_STARTFILE_PREFIX_1/2` (`/amd64/lib.gcc/ape/`, `/amd64/lib.gcc/`,
+    sysroot-relative, after the user's `-L`); `LIB_SPEC -lap`; no crt files
+    (`_main` is in libap/libc).
   - `LINK_SPEC`: `-static -z noseparate-code -z max-page-size=0x1000`, `-T %R/amd64/plan9.ld`
-    (wenn kein `-T`), `--wrap=main`.
-- Konstruktoren: 9fronts `_main` kennt kein `.init_array`. `amd64/plan9.ld` (9front-Repo) sammelt
-  es jetzt mit `__init_array_start/end`; libgcc bekommt `config/i386/plan9-main.c`
-  (`__wrap_main` ruft die Konstruktoren, dann `__real_main`). Symbole weak.
-  `DEFAULT_USE_CXA_ATEXIT 0` (APE hat atexit, kein `__cxa_atexit`).
-- fixincludes aus (`--disable-fixincludes`): die APE-Header werden nicht kopiert/verändert.
+    (if no `-T`), `--wrap=main`.
+- Constructors: 9front's `_main` does not know `.init_array`. `amd64/plan9.ld` (9front repo) now
+  collects it with `__init_array_start/end`; libgcc gets `config/i386/plan9-main.c`
+  (`__wrap_main` calls the constructors, then `__real_main`). Symbols weak.
+  `DEFAULT_USE_CXA_ATEXIT 0` (APE has atexit, no `__cxa_atexit`).
+- fixincludes off (`--disable-fixincludes`): the APE headers are not copied/modified.
 
-## Arbeitsweise
+## Way of working
 
-- `src/gcc`, `src/binutils` sind git-Repos mit Tag `pristine` (= Tarball); Änderungen dort
-  machen, `./patches.sh` schreibt `patches/*.patch`; `fetch.sh` spielt sie auf frische Quellen.
-- Signaturen aller Tarballs gegen `gnu-keyring.gpg` geprüft (gpgv), sha256 in `sha256.txt`.
+- `src/gcc`, `src/binutils` are git repos with tag `pristine` (= tarball); make changes
+  there, `./patches.sh` writes `patches/*.patch`; `fetch.sh` applies them to fresh sources.
+- Signatures of all tarballs checked against `gnu-keyring.gpg` (gpgv), sha256 in `sha256.txt`.
 
-## Cross-Toolchain (Phase 2)
+## Cross toolchain (phase 2)
 
-- `build.sh cross`: binutils + gcc (c, c++) + libgcc + libstdc++ nach `build/cross`, Sysroot =
-  Symlinks in den gebauten 9front-Baum (`sysroot.sh`).
-- APE-Feature-Makros: `unistd.h` bricht ohne `_POSIX_SOURCE` ab. Der Treiber setzt
-  `-D_POSIX_SOURCE= -D_BSD_EXTENSION= -D_LIMITS_EXTENSION=` (leer wie `#define _POSIX_SOURCE`
-  in Programmen → keine Redefinitions-Warnung), aber nicht bei `-nostdinc` (Tree-Builds).
-- `_Noreturn` (C11, in APE-`stdlib.h`) gibt es in C++ nicht: im C++-Modus vordefiniert als
-  `__attribute__((__noreturn__))` (wie glibc `sys/cdefs.h`).
-- `.note.GNU-stack`/`.note.gnu.property` wie Linux (`file_end_indicate_exec_stack_and_gnu_property`,
-  `gnu-property.o`); `-z noexecstack` im LINK_SPEC, weil APEs asm-Stubs keine Notiz haben.
-- `MATH_LIBRARY ""`: Mathe steckt in libap, g++ soll kein `-lm` anhängen.
-- libstdc++: `crossconfig.m4` bekam `*-plan9*` (Link-Tests gegen den Sysroot); configure mit
-  autoconf **2.69** neu erzeugt (Host hat 2.73; `build/tools`, Quelle in sources.txt).
-  `system_error.cc`: `EPROTOTYPE == EPROTONOSUPPORT` (beide 37) in APE → `duplicate case`;
-  Guard im Stil der vorhandenen `EWOULDBLOCK != EAGAIN`-Abfrage.
+- `build.sh cross`: binutils + gcc (c, c++) + libgcc + libstdc++ to `build/cross`, sysroot =
+  symlinks into the built 9front tree (`sysroot.sh`).
+- APE feature macros: `unistd.h` aborts without `_POSIX_SOURCE`. The driver sets
+  `-D_POSIX_SOURCE= -D_BSD_EXTENSION= -D_LIMITS_EXTENSION=` (empty like `#define _POSIX_SOURCE`
+  in programs → no redefinition warning), but not with `-nostdinc` (tree builds).
+- `_Noreturn` (C11, in APE `stdlib.h`) does not exist in C++: in C++ mode predefined as
+  `__attribute__((__noreturn__))` (like glibc `sys/cdefs.h`).
+- `.note.GNU-stack`/`.note.gnu.property` like Linux (`file_end_indicate_exec_stack_and_gnu_property`,
+  `gnu-property.o`); `-z noexecstack` in LINK_SPEC, because APE's asm stubs have no note.
+- `MATH_LIBRARY ""`: math is in libap, g++ should not append `-lm`.
+- libstdc++: `crossconfig.m4` got `*-plan9*` (link tests against the sysroot); configure regenerated with
+  autoconf **2.69** (host has 2.73; `build/tools`, source in sources.txt).
+  `system_error.cc`: `EPROTOTYPE == EPROTONOSUPPORT` (both 37) in APE → `duplicate case`;
+  guard in the style of the existing `EWOULDBLOCK != EAGAIN` check.
 - **compat/include** (→ `$prefix/x86_64-pc-plan9/include`, `TOOL_INCLUDE_DIR`, in
-  `INCLUDE_DEFAULTS` vor den APE-Verzeichnissen): was C99/C11/POSIX.1-2008 APE fehlt, per
-  `#include_next` auf APE: `errno.h` (EILSEQ, EALREADY, ECONNRESET, ELOOP, ENOMSG, ENOTSUP,
-  EOVERFLOW; Werte ab 1100, libap setzt sie nie), `math.h` (fpclassify/FP_*, isfinite,
-  isnormal, signbit über Builtins), `stddef.h` (max_align_t). Bewusst nicht in 9fronts APE:
-  der Tree und seine Builds bleiben unverändert.
-- Das C++23-Modul `std` kompiliert nicht (APE hat kein C99-libm: `sinf`, `strtold`, …);
-  libstdc++ fängt das selbst ab (leeres Modul, „Cannot compile std module“). Kein Fehler.
-- `gcc_cv_initfini_array=no` im Cross-Build (configure kann es nicht prüfen) → statische
-  Konstruktoren wurden nirgends eingetragen. `--enable-initfini-array` erzwingt `.init_array`.
-- Dezimal-Gleitkomma: der Linux-gcc hat `__DEC*`-Makros, unser Target nicht
-  („decimal float is not supported for this target“). Der Tree nutzt `_Decimal*` nicht.
-- Im Gast (boot-cli.sh, `UFS_EXTRA`): APE-Hello-World und natives Plan-9-Programm
-  (`-nostdinc -I…`, `-nostdlib … -lc -lgcc`) vom Cross-gcc laufen.
+  `INCLUDE_DEFAULTS` before the APE directories): what C99/C11/POSIX.1-2008 APE lacks, via
+  `#include_next` to APE: `errno.h` (EILSEQ, EALREADY, ECONNRESET, ELOOP, ENOMSG, ENOTSUP,
+  EOVERFLOW; values from 1100, libap never sets them), `math.h` (fpclassify/FP_*, isfinite,
+  isnormal, signbit via builtins), `stddef.h` (max_align_t). Deliberately not in 9front's APE:
+  the tree and its builds stay unchanged.
+- The C++23 module `std` does not compile (APE has no C99 libm: `sinf`, `strtold`, …);
+  libstdc++ catches that itself (empty module, „Cannot compile std module“). Not a bug.
+- `gcc_cv_initfini_array=no` in the cross build (configure cannot check it) → static
+  constructors were not registered anywhere. `--enable-initfini-array` forces `.init_array`.
+- Decimal floating point: the Linux gcc has `__DEC*` macros, our target does not
+  („decimal float is not supported for this target“). The tree does not use `_Decimal*`.
+- In the guest (boot-cli.sh, `UFS_EXTRA`): APE hello world and a native Plan 9 program
+  (`-nostdinc -I…`, `-nostdlib … -lc -lgcc`) from the cross gcc run.
 
-## Host-Bibliotheken (Phase 3)
+## Host libraries (phase 3)
 
-- gmp 6.3.0: configure-Tests mit K&R-Deklarationen scheitern unter gcc 16 (C23-Default) →
-  `CFLAGS=-std=gnu17` für die Host-Bibliotheken. Doppelte `-D_POSIX_SOURCE` (Treiber + CFLAGS)
-  gaben Redefinitions-Warnungen, die gmps Compiler-Test als Fehler wertet → nur der Treiber.
-- mpfr: `static_assert(MPFR_EXP_MAX > MPFR_PREC_MAX)` scheiterte: **APEs `limits.h` hatte
-  `LONG_MAX`/`ULONG_MAX` fest auf 32 Bit**, unter gcc ist long 64 Bit. Echter Port-Fehler im
-  9front-Baum (libap `strtol`/`strtoul` begrenzten auf 2^31-1) → in 9front gefixt:
-  `__LONG_MAX__` (nur gcc definiert es; 6c/8c behalten front's Werte).
-- mpfr braucht `wint_t` (`<wchar.h>`, fehlt in APE) → `compat/include/wchar.h` nur mit Typen
-  und Grenzen (`wint_t`, `mbstate_t`, `WINT_MIN/MAX`, `WEOF`), keine Funktionen.
-  `wchar_t` bleibt 32 Bit (int) wie beim Linux-gcc: 9fronts `Rune` ist `uint`, `L"…"` im Tree.
-  (APEs `stddef.h` sagt `unsigned short wchar_t` — Altlast, nicht angefasst.)
-- mpc 1.4 braucht `<complex.h>` → `compat/include/complex.h` (Typ-Makros, creal/cimag/conj über
-  Builtins, CMPLX). mpc `radius.c` nutzt `PRIi64` → `compat/include/inttypes.h` ergänzt alle
-  C99-PRI/SCN-Makros, die APE fehlen (64 Bit/MAX/PTR = long long).
+- gmp 6.3.0: configure tests with K&R declarations fail under gcc 16 (C23 default) →
+  `CFLAGS=-std=gnu17` for the host libraries. Duplicate `-D_POSIX_SOURCE` (driver + CFLAGS)
+  gave redefinition warnings, which gmp's compiler test counts as errors → the driver only.
+- mpfr: `static_assert(MPFR_EXP_MAX > MPFR_PREC_MAX)` failed: **APE's `limits.h` had
+  `LONG_MAX`/`ULONG_MAX` fixed at 32 bits**, under gcc long is 64 bits. A real port bug in the
+  9front tree (libap `strtol`/`strtoul` limited to 2^31-1) → fixed in 9front:
+  `__LONG_MAX__` (only gcc defines it; 6c/8c keep front's values).
+- mpfr needs `wint_t` (`<wchar.h>`, missing in APE) → `compat/include/wchar.h` with only types
+  and limits (`wint_t`, `mbstate_t`, `WINT_MIN/MAX`, `WEOF`), no functions.
+  `wchar_t` stays 32 bits (int) like with the Linux gcc: 9front's `Rune` is `uint`, `L"…"` in the tree.
+  (APE's `stddef.h` says `unsigned short wchar_t` — legacy, not touched.)
+- mpc 1.4 needs `<complex.h>` → `compat/include/complex.h` (type macros, creal/cimag/conj via
+  builtins, CMPLX). mpc `radius.c` uses `PRIi64` → `compat/include/inttypes.h` adds all
+  C99 PRI/SCN macros that APE lacks (64 bit/MAX/PTR = long long).
 
-## Gate Phase 2: 9front-Baum mit dem Cross-gcc
+## Gate phase 2: 9front tree with the cross gcc
 
-- Worktree des 9front-Repos (Commit `01e5c0aa5` + `plan9.ld`) mit
-  `CC=gcc TOOLPREFIX=x86_64-pc-plan9- ARCH=amd64 build.exe` gebaut: **813 files expected, ok**.
-  Gegen eine zweite Worktree mit dem Linux-gcc (16.2.1) verglichen (`objcopy --strip-debug
-  -R .comment -R .note.gnu.property`): **5032 von 5037 Objekten byte-identisch**.
-- Die 5 Abweichungen: `9/pc64/userinit.o`, `pc64.o` binden gelinkte Binaries ein (initcode,
-  bootfs.paq), deren `.comment` die Compiler-Version trägt (+ paq-Zeitstempel); `cmd/gs`
-  (gs.r.o, gsmisc.o, gsmalloc.o): `malloc_.h` hat `#ifdef linux` — **der Linux-gcc definiert
-  `linux`, der Tree-Build nimmt dadurch Linux-Pfade** (latenter Fehler im 9front-Build, vgl.
-  MEMORY.md; das plan9-Target definiert es korrekt nicht).
-- Ein Baum für Linux-gcc-Vergleiche braucht `../plan9port` neben sich (gen-runetype.sh).
+- Worktree of the 9front repo (commit `01e5c0aa5` + `plan9.ld`) built with
+  `CC=gcc TOOLPREFIX=x86_64-pc-plan9- ARCH=amd64 build.exe`: **813 files expected, ok**.
+  Compared against a second worktree with the Linux gcc (16.2.1) (`objcopy --strip-debug
+  -R .comment -R .note.gnu.property`): **5032 of 5037 objects byte-identical**.
+- The 5 differences: `9/pc64/userinit.o`, `pc64.o` embed linked binaries (initcode,
+  bootfs.paq) whose `.comment` carries the compiler version (+ paq timestamp); `cmd/gs`
+  (gs.r.o, gsmisc.o, gsmalloc.o): `malloc_.h` has `#ifdef linux` — **the Linux gcc defines
+  `linux`, so the tree build takes Linux paths** (latent bug in the 9front build, cf.
+  MEMORY.md; the plan9 target correctly does not define it).
+- A tree for Linux-gcc comparisons needs `../plan9port` next to it (gen-runetype.sh).
 
-## Native Toolchain (Phase 4)
+## Native toolchain (phase 4)
 
-- Canadian Cross: build=Linux, host=target=x86_64-pc-plan9, `--prefix=/amd64/gnu`,
-  `DESTDIR=out/amd64`. `ac_cv_c_bigendian=no` (AC_C_BIGENDIAN findet im Canadian-Build nichts),
-  `CXXFLAGS=-DCODY_NETWORKING=0` (libcody nimmt bei `__unix__` Sockets an).
-- **C-Default gnu17 statt gnu23** (neues Target-Makro `C_DEFAULT_GNU17`, `c-family/c-opts.cc`):
-  APE deklariert Signal-Handler K&R `void (*)()` (bewusst ohne Parametertypen: Handler mit
-  Note + Ureg); C23 liest `()` als `(void)`. Explizites `-std=` gewinnt.
-- **libcpp-Bug (upstream)**: `_cpp_post_stack_file` nimmt `sysp` als `bool` → aus 2 („C-Header,
-  implizit extern "C"") wird 1. Damit wirkte `SYSTEM_IMPLICIT_EXTERN_C` nie (AIX genauso
-  betroffen). Fix: `int`. Gefunden mit gdb: Verzeichnis sysp=2, Line-Map sysp=1.
-- `SYSTEM_IMPLICIT_EXTERN_C` im plan9.h: APE-Header ohne `extern "C"` (z. B. `sys/time.h`).
-- `_BSD_EXTENSION` **nicht** mehr per Default: `bsd.h` hat Nicht-POSIX-Prototypen (getopt,
-  strcasecmp ohne const) → Konflikte mit Programmen. BSD-only-Header (`sys/param.h`,
+- Canadian cross: build=Linux, host=target=x86_64-pc-plan9, `--prefix=/amd64/gnu`,
+  `DESTDIR=out/amd64`. `ac_cv_c_bigendian=no` (AC_C_BIGENDIAN finds nothing in the Canadian build),
+  `CXXFLAGS=-DCODY_NETWORKING=0` (libcody assumes sockets with `__unix__`).
+- **C default gnu17 instead of gnu23** (new target macro `C_DEFAULT_GNU17`, `c-family/c-opts.cc`):
+  APE declares signal handlers K&R `void (*)()` (deliberately without parameter types: handlers with
+  note + Ureg); C23 reads `()` as `(void)`. An explicit `-std=` wins.
+- **libcpp bug (upstream)**: `_cpp_post_stack_file` takes `sysp` as `bool` → 2 („C header,
+  implicitly extern "C"") becomes 1. So `SYSTEM_IMPLICIT_EXTERN_C` never took effect (AIX is affected
+  the same way). Fix: `int`. Found with gdb: directory sysp=2, line map sysp=1.
+- `SYSTEM_IMPLICIT_EXTERN_C` in plan9.h: APE headers without `extern "C"` (e.g. `sys/time.h`).
+- `_BSD_EXTENSION` **no longer** by default: `bsd.h` has non-POSIX prototypes (getopt,
+  strcasecmp without const) → conflicts with programs. BSD-only headers (`sys/param.h`,
   `sys/select.h`, `select.h`, `sys/ioctl.h`, `sys/uio.h`, `sys/resource.h`, `sys/socket.h`,
-  `netdb.h`) schalten es in compat nur für sich ein. `LIB_SPEC "-lapecompat -lbsd -lap"`
-  (gcc ignoriert `#pragma lib`).
-- compat-Header (Umbenennungs-Trick `#define f __ape_f` um das `#include_next`, dann
-  POSIX-Deklaration derselben libap-Funktion): `execv/execve/execvp` (`char *const[]`),
-  `strndup` (const), `signal`/`SIG_*`/`struct sigaction` (nur C++ und C23; Layout per
-  Array-Größen-Check gegen APEs struct), `ptrdiff_t` (= `__PTRDIFF_TYPE__` long wie
-  libstdc++s `std::ptrdiff_t`; APE: long long → „ambiguous“ in C++).
-- compat-Header ohne Umbenennung: `stdbool.h` (ersetzt APEs C89-Version), `strings.h`,
+  `netdb.h`) enable it in compat only for themselves. `LIB_SPEC "-lapecompat -lbsd -lap"`
+  (gcc ignores `#pragma lib`).
+- compat headers (renaming trick `#define f __ape_f` around the `#include_next`, then
+  the POSIX declaration of the same libap function): `execv/execve/execvp` (`char *const[]`),
+  `strndup` (const), `signal`/`SIG_*`/`struct sigaction` (only C++ and C23; layout checked via
+  array-size check against APE's struct), `ptrdiff_t` (= `__PTRDIFF_TYPE__` long like
+  libstdc++'s `std::ptrdiff_t`; APE: long long → „ambiguous“ in C++).
+- compat headers without renaming: `stdbool.h` (replaces APE's C89 version), `strings.h`,
   `string.h` (+strings.h, stpcpy, stpncpy), `unistd.h` (getopt, mktemp, symlink, truncate),
   `sys/wait.h` (wait3/wait4 + struct rusage), `sys/stat.h` (fchmod, lstat, S_IF*),
-  `stdint.h` (INTn_C, PTR/PTRDIFF/SIG_ATOMIC/WCHAR/WINT-Grenzen), `stddef.h` (offsetof als
+  `stdint.h` (INTn_C, PTR/PTRDIFF/SIG_ATOMIC/WCHAR/WINT limits), `stddef.h` (offsetof as
   `__builtin_offsetof`, max_align_t), `dlfcn.h`, `stdio.h` (asprintf, vasprintf, popen).
-- **libapecompat.a** (compat/lib): asprintf/vasprintf (wachsender Puffer: APEs vsnprintf
-  liefert nicht C99s Gesamtlänge), stpcpy, stpncpy, strndup (APE deklariert, implementiert
-  nicht), truncate, dlopen & Co. (schlägt immer fehl, dlerror sagt warum — ld ruft dlopen für
-  `-plugin` auch ohne Plugin-Support), `readlink` als `__apecompat_readlink` (asm-Label):
-  libbsds readlink gibt `int` zurück, ein POSIX-Aufrufer liest `ssize_t` → -1 käme als 2^32-1.
-- 9front-Baum (echte LP64-Fehler, gefixt): `sys/include/ape/stdint.h` `SIZE_MAX` war
-  `UINT32_MAX` (unter gcc ist size_t 64 Bit) → `__SIZE_MAX__`.
-- Native binutils (as, ld, ar, nm, objcopy, objdump, ranlib, strip, readelf, size, …) gebaut.
-- `make_relative_prefix` (libiberty) sucht das Programm über `$PATH`; 9fronts rc kennt nur
-  `path`, und mit binds liegt `gcc` unter `/bin`, unabhängig vom Installationsort. Der Treiber
-  verzichtet auf einem Plan-9-Host (`__plan9__`) auf die Relokation und nimmt die konfigurierten
-  Pfade (`/amd64/gnu/...`). Vorher: `programs: =../libexec/...` → „cc1: not found“.
-- **libiberty-Bug (upstream)**: `lrealpath` fällt ohne `realpath`/`canonicalize_file_name` ans
-  Funktionsende ohne `return` (nur der Windows-Zweig gibt etwas zurück) → Müll; ld meldete
-  „input file 'hi.o' is the same as output file“. Fix: `return strdup (filename);` (in gcc und
-  binutils), dazu `realpath` in libapecompat (absolut, `.`/`..` bereinigt, existiert; keine
-  Symlinks auf 9front).
-- libgcc mit `-std=gnu23` (`t-plan9`): sie ist für gccs eigenen Default geschrieben (`bool`).
-- `install-strip`: cc1 389 MB → 40 MB, `/amd64/gnu` insgesamt 107 MB.
-- **Gate Phase 4** (`tests/native.sh`): im Gast `gcc` → APE-Programm läuft, natives
-  Plan-9-Programm (`-nostdinc … -lc -lgcc`) läuft, Objekt byte-gleich mit dem Cross-gcc.
+- **libapecompat.a** (compat/lib): asprintf/vasprintf (growing buffer: APE's vsnprintf
+  does not return C99's total length), stpcpy, stpncpy, strndup (APE declares, does not
+  implement), truncate, dlopen & co. (always fails, dlerror says why — ld calls dlopen for
+  `-plugin` even without plugin support), `readlink` as `__apecompat_readlink` (asm label):
+  libbsd's readlink returns `int`, a POSIX caller reads `ssize_t` → -1 would come out as 2^32-1.
+- 9front tree (real LP64 bugs, fixed): `sys/include/ape/stdint.h` `SIZE_MAX` was
+  `UINT32_MAX` (under gcc size_t is 64 bits) → `__SIZE_MAX__`.
+- Native binutils (as, ld, ar, nm, objcopy, objdump, ranlib, strip, readelf, size, …) built.
+- `make_relative_prefix` (libiberty) searches for the program via `$PATH`; 9front's rc knows only
+  `path`, and with binds `gcc` lies under `/bin`, independent of the install location. The driver
+  skips relocation on a Plan 9 host (`__plan9__`) and takes the configured
+  paths (`/amd64/gnu/...`). Before: `programs: =../libexec/...` → „cc1: not found“.
+- **libiberty bug (upstream)**: `lrealpath` without `realpath`/`canonicalize_file_name` falls to the
+  end of the function without `return` (only the Windows branch returns something) → garbage; ld reported
+  „input file 'hi.o' is the same as output file“. Fix: `return strdup (filename);` (in gcc and
+  binutils), plus `realpath` in libapecompat (absolute, `.`/`..` cleaned, exists; no
+  symlinks on 9front).
+- libgcc with `-std=gnu23` (`t-plan9`): it is written for gcc's own default (`bool`).
+- `install-strip`: cc1 389 MB → 40 MB, `/amd64/gnu` in total 107 MB.
+- **Gate phase 4** (`tests/native.sh`): in the guest `gcc` → APE program runs, native
+  Plan 9 program (`-nostdinc … -lc -lgcc`) runs, object byte-identical with the cross gcc.
 
 ## 386: i686-pc-plan9
 
-- Target-Eintrag `i[34567]86-*-plan9*` (gcc, libgcc, bfd `i386_elf32_vec`, ld `elf_i386`, gas schon
-  generisch). `i386/plan9-386.h` vor `plan9.h`: `PLAN9_OBJTYPE "386"`,
-  `-mincoming-stack-boundary=2` per Default (9fronts 386-Programme starten mit nur 4-Byte-
-  ausgerichtetem Stack; der Tree baut ebenso, `386/cflags.json`), `--with-arch=pentium` wie
-  `-march=pentium` im Tree. `DEFAULT_PCC_STRUCT_RETURN` bleibt 1 (= Linux i386).
-- libgcc: der Unwinder (`__builtin_eh_return`) verträgt keine Stack-Neuausrichtung → für
-  `unwind-dw2.c`/`unwind-sjlj.c` `-mincoming-stack-boundary=4` (`CFLAGS-<datei>` in `t-plan9`).
-- compat: `stdint.h`/`inttypes.h` je nach Zeigergröße (`intptr_t` ist auf 386 `int`),
-  `PTRDIFF_*` aus `__PTRDIFF_MAX__`; `ctype.h` (`isascii`/`toascii`, in APE nur BSD; gmp).
-- `386/plan9.ld` sammelt `.init_array` wie amd64.
-- Baustruktur jetzt `build/$objtype/…` (`objtype=386 ./build.sh …`), `out/$objtype`; amd64s
-  alter Bau in `build/` (Symlinks aus `build/amd64`) ist ersetzt (s. „APE für C++ erweitert“).
-- Cross, Host-Libs, nativ für 386 gebaut (`/386/gnu` 80 MB).
-- Gast (9pc): `objtype=386 tests/cross.sh` (APE, nativ, C++) und `objtype=386 tests/native.sh`
-  (APE, nativ, Objekt byte-gleich mit dem Cross-gcc) bestanden.
+- Target entry `i[34567]86-*-plan9*` (gcc, libgcc, bfd `i386_elf32_vec`, ld `elf_i386`, gas already
+  generic). `i386/plan9-386.h` before `plan9.h`: `PLAN9_OBJTYPE "386"`,
+  `-mincoming-stack-boundary=2` by default (9front's 386 programs start with only a 4-byte
+  aligned stack; the tree builds the same way, `386/cflags.json`), `--with-arch=pentium` like
+  `-march=pentium` in the tree. `DEFAULT_PCC_STRUCT_RETURN` stays 1 (= Linux i386).
+- libgcc: the unwinder (`__builtin_eh_return`) cannot tolerate stack realignment → for
+  `unwind-dw2.c`/`unwind-sjlj.c` `-mincoming-stack-boundary=4` (`CFLAGS-<file>` in `t-plan9`).
+- compat: `stdint.h`/`inttypes.h` depending on pointer size (`intptr_t` is `int` on 386),
+  `PTRDIFF_*` from `__PTRDIFF_MAX__`; `ctype.h` (`isascii`/`toascii`, in APE only BSD; gmp).
+- `386/plan9.ld` collects `.init_array` like amd64.
+- Build structure is now `build/$objtype/…` (`objtype=386 ./build.sh …`), `out/$objtype`; amd64's
+  old build in `build/` (symlinks from `build/amd64`) is replaced (see „APE extended for C++“).
+- Cross, host libs, native built for 386 (`/386/gnu` 80 MB).
+- Guest (9pc): `objtype=386 tests/cross.sh` (APE, native, C++) and `objtype=386 tests/native.sh`
+  (APE, native, object byte-identical with the cross gcc) passed.
 
-## gccmk: mk mit gcc auf 9front (`plan9/`, `build.sh plan9`)
+## gccmk: mk with gcc on 9front (`plan9/`, `build.sh plan9`)
 
-- `gccmk` = mk in einem Namensraum: `/$objtype/mkfile` → `/$objtype/gnu/plan9/mkfile`
-  (`CC=gcc-cc LD=gcc-ld AS=gcc-as`, `O` wie bei kencc), `bind -b …/plan9/bin /bin` (`pcc`, `ar`),
-  `bind -c /$objtype/lib.gcc /$objtype/lib`. Flags = die des Tree-Builds (`cflags.json`, `gcc.json`,
-  `ape.json`, Oflags/Libs; Bibliotheksliste aus `sys/src/cmd/cmds.json` bzw. `ape/cmd`), von
-  `build.sh plan9` als eine Zeile je Argument abgelegt (`lib.rc` liest mit `ifs=$nl`).
-- Linken wie `build.exe` (`presolve`): `ld -r`, Common-Symbole schwach (`objcopy --weaken-symbols`),
-  dann alle Bibliotheken in einer Gruppe; 386 braucht `libgcc.a` (64-Bit-Division) aus
-  `cflags.json`s `Libs`.
-- `ar`: GNU ar mit `r` (mksyslibs `ar vu` nennt keine Operation) und `s` (Index für GNU ld);
-  **Mitglieder heißen `x.o` wie bei build.exe** — sonst stünden `x.6` neben den `x.o` des Builds
-  im Archiv und ld nähme womöglich das alte.
-- `tests/mk.sh` (amd64 und 386 grün): libbio (`gccmk install`, keine `.$O`-Mitglieder), Objekte
-  gleich dem Tree-Build, libc-Assembler über die GAS-Ports, hoc (yacc) und ape/cmd/expr (pcc)
-  laufen. Vergleich mit `--strip-unneeded` ohne `.eh_frame`: der Linux-gcc für i386 erzeugt
-  Unwind-Tabellen per Default, i686-pc-plan9 nicht (Code und Relokationen gleich).
-- Grenzen: Kernel, libc als Ganzes (`9syscall` schreibt 6a-Assembler). libmp/libsec (amd64, 386)
-  und `libc/386/387` haben inzwischen GAS-Ports (9front-Repo, `tests/asm`); `tests/mk.sh` baut
-  libmp/libsec-Assembler mit gccmk und vergleicht mit dem Tree-Build.
+- `gccmk` = mk in a namespace: `/$objtype/mkfile` → `/$objtype/gnu/plan9/mkfile`
+  (`CC=gcc-cc LD=gcc-ld AS=gcc-as`, `O` as with kencc), `bind -b …/plan9/bin /bin` (`pcc`, `ar`),
+  `bind -c /$objtype/lib.gcc /$objtype/lib`. Flags = those of the tree build (`cflags.json`, `gcc.json`,
+  `ape.json`, Oflags/Libs; library list from `sys/src/cmd/cmds.json` or `ape/cmd`), stored by
+  `build.sh plan9` as one line per argument (`lib.rc` reads with `ifs=$nl`).
+- Linking like `build.exe` (`presolve`): `ld -r`, common symbols weak (`objcopy --weaken-symbols`),
+  then all libraries in one group; 386 needs `libgcc.a` (64-bit division) from
+  `cflags.json`'s `Libs`.
+- `ar`: GNU ar with `r` (mksyslibs `ar vu` names no operation) and `s` (index for GNU ld);
+  **members are named `x.o` like with build.exe** — otherwise `x.6` would sit next to the `x.o` of the build
+  in the archive and ld might take the old one.
+- `tests/mk.sh` (amd64 and 386 green): libbio (`gccmk install`, no `.$O` members), objects
+  equal to the tree build, libc assembler via the GAS ports, hoc (yacc) and ape/cmd/expr (pcc)
+  run. Comparison with `--strip-unneeded` without `.eh_frame`: the Linux gcc for i386 produces
+  unwind tables by default, i686-pc-plan9 does not (code and relocations equal).
+- Limits: kernel, libc as a whole (`9syscall` writes 6a assembler). libmp/libsec (amd64, 386)
+  and `libc/386/387` now have GAS ports (9front repo, `tests/asm`); `tests/mk.sh` builds
+  libmp/libsec assembler with gccmk and compares with the tree build.
 
-## C++ nativ: g++ auf 9front (amd64, 386)
+## C++ native: g++ on 9front (amd64, 386)
 
-- Nativer gcc jetzt mit `--enable-languages=c,c++`: `g++`, `cc1plus`, libstdc++/libsupc++ und
-  die C++-Header unter `/$objtype/gnu` (amd64 152 MB, 386 143 MB). libstdc++-Optionen für
-  Cross und nativ gemeinsam (`LIBSTDCXX_CONF` in build.sh).
-- **Exceptions gingen nirgends** (auch nicht mit dem Cross-g++, `tests/cxx.cc` mied sie): `throw`
-  → `std::terminate` → „abort“. Ursache: keine crt-Dateien, also registrierte niemand `.eh_frame`
-  beim Unwinder, und ohne `dl_iterate_phdr` gibt es keinen anderen Weg zu den FDEs. Fix wie auf
-  anderen ELF-Systemen ohne `PT_GNU_EH_FRAME`: libgcc baut `crtbegin.o`/`crtend.o` (`extra_parts`,
-  `i386/t-crtstuff`, kein PIC), `STARTFILE_SPEC`/`ENDFILE_SPEC` nennen sie (nicht bei
-  `-nostdlib`/`-nostartfiles`, also nicht im Tree-Build). `frame_dummy` steht in `.init_array`,
-  `__wrap_main` ruft es; `__register_frame_info` ist dort schwach → C-Programme ziehen den
-  Unwinder nicht herein. crtstuff braucht wie libgcc2 `-std=gnu23` (`CRTSTUFF_T_CFLAGS`).
-- 9front-Repo: `plan9.ld` (amd64, 386) sammelt `.gcc_except_table*` in einer Sektion im
-  Textsegment (vorher Orphans). C-Programme linken damit byte-gleich wie vorher.
-- **Canadian-Falle:** die Target-Bibliotheken baut der installierte Cross-g++; libstdc++s configure
-  sah damit die *installierten* libstdc++-Header — deren `<fenv.h>`-Wrapper ist leer (APE hat kein
-  fenv.h) → „fenv.h usability… yes“, `HAVE_FENV_H`, Abbruch in `floating_to_chars.cc`. Der
-  Cross-Build nimmt `xgcc -nostdinc++`; nativ jetzt ebenso: `CXX_FOR_TARGET="$TARGET-g++ -nostdinc++"`.
-- build.sh: `conf` merkt sich die configure-Argumente (`$B/<dir>.args`) und konfiguriert bei
-  Änderung neu (vorher blieb ein alter Baum stehen); fehlt die Datei, gilt der Baum als aktuell.
-- Tests: `tests/eh.cc` (throw über Rahmen, rethrow, Destruktoren beim Unwinden, `vector::at`).
-  `tests/cross.sh` (ape, plan9, cxx, eh) und `tests/native.sh` (+ cxx, eh mit dem nativen g++,
-  `samecxx`: Objekt von eh.cc byte-gleich mit dem Cross-g++) für amd64 und 386 grün.
+- Native gcc now with `--enable-languages=c,c++`: `g++`, `cc1plus`, libstdc++/libsupc++ and
+  the C++ headers under `/$objtype/gnu` (amd64 152 MB, 386 143 MB). libstdc++ options shared by
+  cross and native (`LIBSTDCXX_CONF` in build.sh).
+- **Exceptions worked nowhere** (not even with the cross g++, `tests/cxx.cc` avoided them): `throw`
+  → `std::terminate` → „abort“. Cause: no crt files, so nobody registered `.eh_frame`
+  with the unwinder, and without `dl_iterate_phdr` there is no other way to the FDEs. Fix as on
+  other ELF systems without `PT_GNU_EH_FRAME`: libgcc builds `crtbegin.o`/`crtend.o` (`extra_parts`,
+  `i386/t-crtstuff`, no PIC), `STARTFILE_SPEC`/`ENDFILE_SPEC` name them (not with
+  `-nostdlib`/`-nostartfiles`, so not in the tree build). `frame_dummy` is in `.init_array`,
+  `__wrap_main` calls it; `__register_frame_info` is weak there → C programs do not pull in
+  the unwinder. crtstuff needs `-std=gnu23` like libgcc2 (`CRTSTUFF_T_CFLAGS`).
+- 9front repo: `plan9.ld` (amd64, 386) collects `.gcc_except_table*` in one section in the
+  text segment (before: orphans). C programs link byte-identically with it as before.
+- **Canadian trap:** the target libraries are built by the installed cross g++; libstdc++'s configure
+  thereby saw the *installed* libstdc++ headers — whose `<fenv.h>` wrapper is empty (APE has no
+  fenv.h) → „fenv.h usability… yes“, `HAVE_FENV_H`, abort in `floating_to_chars.cc`. The
+  cross build takes `xgcc -nostdinc++`; native now likewise: `CXX_FOR_TARGET="$TARGET-g++ -nostdinc++"`.
+- build.sh: `conf` remembers the configure arguments (`$B/<dir>.args`) and reconfigures on
+  change (before, an old tree was left standing); if the file is missing, the tree counts as up to date.
+- Tests: `tests/eh.cc` (throw across frames, rethrow, destructors while unwinding, `vector::at`).
+  `tests/cross.sh` (ape, plan9, cxx, eh) and `tests/native.sh` (+ cxx, eh with the native g++,
+  `samecxx`: object of eh.cc byte-identical with the cross g++) green for amd64 and 386.
 
-## APE für C++ erweitert (compat, musl)
+## APE extended for C++ (compat, musl)
 
-Ziel: libstdc++ mit allem, was es über C99/POSIX findet. Entscheidung: alles in der Toolchain
-(`compat/`, `libapecompat.a`), 9fronts APE bleibt — bis auf echte Port-Fehler (malloc, s. u.).
+Goal: libstdc++ with everything it finds beyond C99/POSIX. Decision: everything in the toolchain
+(`compat/`, `libapecompat.a`), 9front's APE stays — except for real port bugs (malloc, see below).
 
-- **musl 1.2.5** als Quelle (`sources.txt` mit Schlüsselspalte; `keys/musl.pub`, Fingerprint
-  8364 8929 0BB6 B70F 99FF DA05 56BC DB59 3020 450F; `fetch.sh` prüft `.asc`). `build.sh musl`
-  baut mit musls eigenem Makefile/Headern (`$B/musl`) und legt Objekte nach `compat-lib/musl-*.o`:
-  - libm, fenv, complex (Arch-Dateien ersetzen generische wie in musls Makefile).
-  - Wide-String-Funktionen (`wcs*`, `wcp*`, `wmem*`) und `<wctype.h>` (`isw*`, `tow*`, `wcwidth`):
-    ohne Locale, Unicode-Tabellen.
-  - Objekte, deren starke Symbole alle libap hat (C89-double-Mathe, j0, erf …), entfallen; in den
-    übrigen werden libap-Namen lokal (`objcopy --localize-symbol`): i386 `scalbn.s` ist auch
-    `ldexp`, `exp10.c` hat ein schwaches `pow10(double)` (APE: `pow10(int)`!).
-  - **Engine** (`musl-engine.o`, `ld -r`): musls vfprintf/vfscanf/strtod/vfwprintf/vfwscanf/
-    vswprintf/vswscanf/wcsto* + `compat/musl/bridge.c` (in musls Umgebung übersetzt); alle Symbole
-    lokal außer `__apecompat_m*` und `wcsto*`. Bridge-FILE = musls String-FILE mit Write-Callback
-    auf APEs `fwrite` und Read-Callback, der byteweise APEs `getc` liest (1-Byte-Puffer wie
-    `__stdio_read`: musls `ungetwc`-Makro und `shgetc` setzen `rpos` zurück und erwarten das Byte
-    im Puffer). Was scanf zurückgibt, geht per `ungetc` an APEs FILE. musls errno landet in einer
-    eigenen Variablen (`___errno_location`) und wird in APEs Nummern übersetzt (musl ENOMEM=12 ist
-    APEs EINVAL!). `__lockfile` wird nie gerufen (lock -1). Wide-Funktionen (fputwc, getwc,
-    ungetwc) in der Engine eigene: musls fragen die Locale über den Thread-Pointer (`%fs`) ab.
-- **printf/scanf**: APEs liest jedes Gleitkomma-Argument als double (`%Lf` gab Müll), kennt `%a`,
-  `%F`, `hh`, `j`, `t` nicht, `snprintf` liefert nicht C99s Länge. compat `stdio.h`: APEs
-  Deklarationen werden umbenannt, die eigenen tragen Link-Namen `__apecompat_*` (Asm-Labels) — nur
-  wo libap denselben Namen hat; sonst normale Namen (configures Link-Tests deklarieren selbst:
-  `strtold` mit Label wurde nicht gefunden).
-- **x87/SSE beim Start** (libgcc `__wrap_main`): 9fronts Kernel gibt CW 0x0232 und MXCSR 0x1900 —
-  Division durch null, Überlauf, ungültig trappen („sys: fp: division by zero“), und der x87
-  rechnet auf 53 Bit (long double = double!). Jetzt CW 0x037f, MXCSR 0x1f80 (amd64; 386 hat
-  maskierte SSE-Ausnahmen vom Kernel, ein Pentium kein MXCSR), wie jedes POSIX-x86. Nur für vom
-  Treiber gelinkte Programme; `-nostdlib` (Tree) behält die des Kernels.
-- **`<float.h>`**: APEs (`/$objtype/include/ape/float.h`) beschreibt kencc: `LDBL_*` = double,
-  `LDBL_MAX` eine double-Konstante. compat übernimmt gccs Werte (+ C99/C11-Makros), APEs Rest
-  (FPdbleword, FP*-Bits) bleibt.
-- **`wchar_t`**: gccs 32 Bit; compat `stddef.h` definiert `_WCHAR_T` vor APEs Header (der sonst
-  `unsigned short` typedeft). APEs `mbtowc` & Co. schreiben 16 Bit → unter Labels ersetzt
-  (`compat/lib/multibyte.c`, striktes UTF-8: Überlangformen, Surrogate, > 0x10FFFF = EILSEQ).
-  Wide-I/O (`wstdio.c`): ungetwc gibt die Bytes per `ungetc` in APEs Puffer zurück, sonst
-  (ungepuffert, Puffergrenze) in eine Tabelle, solange fd und Puffer des FILE gleich sind.
-- **`intmax_t`** = `__INTMAX_TYPE__` (long auf amd64; APE: long long): sonst `-Wformat` bei `%jd`
-  und ein anderer Typ als `std::intmax_t`. `int64_t` bleibt APEs long long (APEs Prototypen mit
-  `long long *`, gcc ≥ 14 bricht bei inkompatiblen Zeigern ab).
-- Zeit: `clock_gettime` über `/dev/bintime` (4. Feld = ns seit Boot, monoton, `tod.c`), dauerhaft
-  offen, `pread` (neu in compat: libaps `_PREAD` + `_syserrno`). `usleep`, `sched_yield`
-  (sleep(0)), `sysconf` mit Prozessorzahl (Zeilen von `/dev/sysstat`) und Seitengröße.
-  `unistd.h` meldet `_POSIX_TIMERS`, `_POSIX_MONOTONIC_CLOCK`, `_POSIX_THREADS`,
-  `_POSIX_TIMEOUTS` … (libstdc++ prüft danach steady_clock und timed_mutex).
-- **pthreads** (`compat/lib/pthread.c`, ein Objekt: `pthread_cancel` ist gthrs Proxy für
-  „Threads aktiv“): Thread = Proc, `rfork(RFPROC|RFMEM|RFNOWAIT)`. Ein Proc hat sein eigenes
-  Stacksegment (Kopie); darauf liegen APEs errno (`_callmain`s lokale Variable, `_errnoloc`
-  zeigt hin) und `_privates` → beide pro Thread ohne weiteres; `_privates[0]` = Thread. Threads
-  laufen auf Stacks aus malloc (geteilter Speicher), `main` auch (`__plan9_mainstack`, von
-  libgccs `__wrap_main` gerufen, wenn gelinkt; 16 MiB wie USTKSIZE) — sonst sähen andere Threads
-  mains Locals nicht (Lambdas mit `[&]`). **Falle**: nach `rfork(RFMEM)` steht das Kind auf dem
-  (geteilten) Heap-Stack des Elternteils → beide laufen auf demselben Stack (Absturz mit pc im
-  Heap). `__apecompat_rforkthread` (Asm) macht den Syscall selbst und setzt im Kind sofort SP auf
-  `privtop` (unter `__plan9_mainstack`s Rahmen, in jeder Kopie frei); Werte in Registern, die das
-  Kind bekommt (amd64 `forkret`: nur R14/R15, Rest null; 386: alle außer AX). Dort läuft der
-  Thread per `runon` auf seinem Heap-Stack und kehrt zum Aufräumen zurück (wer den Stack freigibt,
-  gibt einen frei, auf dem niemand läuft). Warten über 9front-Semaphoren (32-Bit, `s32int`):
-  Mutex nach Drepper (3 Zustände), Condition mit Warteschlange und einer Semaphore je Thread,
-  rwlock (Schreiber zuerst), once, Keys mit Sequenznummern. `exit` beendet die anderen Threads
-  (`/proc/n/ctl` „kill“). Kein `pthread_cancel`, keine prozessübergreifenden Objekte.
-- gcc: `--enable-threads=posix` (gthr-posix, emutls für `thread_local`), libstdc++ ohne
-  `--disable-wchar_t`/`--disable-libstdcxx-threads`, mit `--enable-libstdcxx-time=yes`;
-  Treiber nimmt `-pthread` an. libstdc++ findet jetzt: C99 math/stdio/stdlib/wchar/complex/fenv/
+- **musl 1.2.5** as source (`sources.txt` with key column; `keys/musl.pub`, fingerprint
+  8364 8929 0BB6 B70F 99FF DA05 56BC DB59 3020 450F; `fetch.sh` checks `.asc`). `build.sh musl`
+  builds with musl's own Makefile/headers (`$B/musl`) and puts objects into `compat-lib/musl-*.o`:
+  - libm, fenv, complex (arch files replace generic ones as in musl's Makefile).
+  - Wide-string functions (`wcs*`, `wcp*`, `wmem*`) and `<wctype.h>` (`isw*`, `tow*`, `wcwidth`):
+    without locale, Unicode tables.
+  - Objects whose strong symbols libap all has (C89 double math, j0, erf …) are dropped; in the
+    rest libap names become local (`objcopy --localize-symbol`): i386 `scalbn.s` is also
+    `ldexp`, `exp10.c` has a weak `pow10(double)` (APE: `pow10(int)`!).
+  - **Engine** (`musl-engine.o`, `ld -r`): musl's vfprintf/vfscanf/strtod/vfwprintf/vfwscanf/
+    vswprintf/vswscanf/wcsto* + `compat/musl/bridge.c` (translated in musl's environment); all symbols
+    local except `__apecompat_m*` and `wcsto*`. Bridge FILE = musl's string FILE with write callback
+    to APE's `fwrite` and a read callback that reads APE's `getc` byte by byte (1-byte buffer like
+    `__stdio_read`: musl's `ungetwc` macro and `shgetc` reset `rpos` and expect the byte
+    in the buffer). What scanf returns goes back to APE's FILE via `ungetc`. musl's errno ends up in a
+    variable of its own (`___errno_location`) and is translated into APE's numbers (musl ENOMEM=12 is
+    APE's EINVAL!). `__lockfile` is never called (lock -1). Wide functions (fputwc, getwc,
+    ungetwc) are the engine's own: musl's query the locale via the thread pointer (`%fs`).
+- **printf/scanf**: APE's reads every floating-point argument as double (`%Lf` gave garbage), does not know `%a`,
+  `%F`, `hh`, `j`, `t`, `snprintf` does not return C99's length. compat `stdio.h`: APE's
+  declarations are renamed, the own ones carry link names `__apecompat_*` (asm labels) — only
+  where libap has the same name; otherwise normal names (configure's link tests declare themselves:
+  `strtold` with a label was not found).
+- **x87/SSE at start** (libgcc `__wrap_main`): 9front's kernel gives CW 0x0232 and MXCSR 0x1900 —
+  division by zero, overflow, invalid trap („sys: fp: division by zero“), and the x87
+  computes in 53 bits (long double = double!). Now CW 0x037f, MXCSR 0x1f80 (amd64; 386 has
+  masked SSE exceptions from the kernel, a Pentium has no MXCSR), like every POSIX x86. Only for programs linked
+  by the driver; `-nostdlib` (tree) keeps the kernel's.
+- **`<float.h>`**: APE's (`/$objtype/include/ape/float.h`) describes kencc: `LDBL_*` = double,
+  `LDBL_MAX` a double constant. compat takes gcc's values (+ C99/C11 macros), APE's rest
+  (FPdbleword, FP* bits) stays.
+- **`wchar_t`**: gcc's 32 bits; compat `stddef.h` defines `_WCHAR_T` before APE's header (which otherwise
+  typedefs `unsigned short`). APE's `mbtowc` & co. write 16 bits → replaced under labels
+  (`compat/lib/multibyte.c`, strict UTF-8: overlong forms, surrogates, > 0x10FFFF = EILSEQ).
+  Wide I/O (`wstdio.c`): ungetwc returns the bytes via `ungetc` into APE's buffer, otherwise
+  (unbuffered, buffer boundary) into a table, as long as fd and buffer of the FILE are the same.
+- **`intmax_t`** = `__INTMAX_TYPE__` (long on amd64; APE: long long): otherwise `-Wformat` for `%jd`
+  and a type different from `std::intmax_t`. `int64_t` stays APE's long long (APE's prototypes with
+  `long long *`, gcc ≥ 14 aborts on incompatible pointers).
+- Time: `clock_gettime` via `/dev/bintime` (4th field = ns since boot, monotonic, `tod.c`), kept
+  open permanently, `pread` (new in compat: libap's `_PREAD` + `_syserrno`). `usleep`, `sched_yield`
+  (sleep(0)), `sysconf` with processor count (lines of `/dev/sysstat`) and page size.
+  `unistd.h` reports `_POSIX_TIMERS`, `_POSIX_MONOTONIC_CLOCK`, `_POSIX_THREADS`,
+  `_POSIX_TIMEOUTS` … (libstdc++ checks steady_clock and timed_mutex for them).
+- **pthreads** (`compat/lib/pthread.c`, one object: `pthread_cancel` is gthr's proxy for
+  „threads active“): thread = proc, `rfork(RFPROC|RFMEM|RFNOWAIT)`. A proc has its own
+  stack segment (copy); on it lie APE's errno (`_callmain`'s local variable, `_errnoloc`
+  points there) and `_privates` → both per thread without further ado; `_privates[0]` = thread. Threads
+  run on stacks from malloc (shared memory), `main` too (`__plan9_mainstack`, called by
+  libgcc's `__wrap_main` when linked; 16 MiB like USTKSIZE) — otherwise other threads would not see
+  main's locals (lambdas with `[&]`). **Trap**: after `rfork(RFMEM)` the child stands on the
+  (shared) heap stack of the parent → both run on the same stack (crash with pc in the
+  heap). `__apecompat_rforkthread` (asm) makes the syscall itself and in the child immediately sets SP to
+  `privtop` (below `__plan9_mainstack`'s frame, free in every copy); values in registers that the
+  child gets (amd64 `forkret`: only R14/R15, rest zero; 386: all except AX). There the
+  thread runs via `runon` on its heap stack and returns for cleanup (whoever frees the stack
+  frees one on which nobody runs). Waiting via 9front semaphores (32-bit, `s32int`):
+  mutex after Drepper (3 states), condition with queue and one semaphore per thread,
+  rwlock (writers first), once, keys with sequence numbers. `exit` ends the other threads
+  (`/proc/n/ctl` „kill“). No `pthread_cancel`, no cross-process objects.
+- gcc: `--enable-threads=posix` (gthr-posix, emutls for `thread_local`), libstdc++ without
+  `--disable-wchar_t`/`--disable-libstdcxx-threads`, with `--enable-libstdcxx-time=yes`;
+  driver accepts `-pthread`. libstdc++ now finds: C99 math/stdio/stdlib/wchar/complex/fenv/
   inttypes, CLOCK_MONOTONIC, nanosleep, sched_yield, rwlock, timedlock, nprocs.
-- **9front-Baum (echter Port-Fehler)**: APEs malloc lieferte nur 8-Byte-ausgerichtete Blöcke
-  (Schrittweite `&~7`, sbrk 4-ausgerichtet), gcc/g++ nehmen 16 an (`max_align_t`,
-  `__STDCPP_DEFAULT_NEW_ALIGNMENT__`, ausgerichtete SSE-Zugriffe). Fix in
-  `sys/src/ape/lib/ap/plan9/malloc.c` (16er-Schritt, `sbrk16`).
-- **amd64-Bauverzeichnisse**: die alten Symlinks `build/amd64/* -> ../*` (Layout vor 386) machten
-  `build/amd64/cross` zum Symlink auf `build/cross`; ein neu konfigurierter gcc mit Präfix
-  `build/amd64/cross` fand sich in `build/cross/bin` und hielt sich für verschoben → `incpath.cc`
-  stellt dann alles unter `lib/gcc/…` an den Anfang, gccs `stddef.h` vor APEs (Fehler
-  `max_align_t`). amd64 jetzt in echten Verzeichnissen neu gebaut wie 386.
-- Tests: `tests/c99math.c` (`-frounding-math`: sonst schiebt gcc `rint` über `fesetround`),
-  `c99stdio.c`, `c99time.c`, `c99wchar.c`, `pthread.c`, `cxxlib.cc` (in `cross.sh`; `cxxlib` auch
-  nativ). Testfallen: gcc faltet `rint(-x)` zu `-rint(x)`; auf 386 inlinet gcc `sqrtf` als
-  `fsqrt` mit Überpräzision; glibcs „C“-Locale ist kein UTF-8 (Hosttest: `C.UTF-8`).
-- Offen: APEs stdio hat keine Locks (Threads, die ein FILE teilen, müssen sich abstimmen;
-  `std::cout` aus mehreren Threads); `_exit`/abort beenden andere Threads nicht; keine Locales
-  außer „C“; `<uchar.h>` fehlt.
+- **9front tree (real port bug)**: APE's malloc returned only 8-byte-aligned blocks
+  (stride `&~7`, sbrk 4-aligned), gcc/g++ assume 16 (`max_align_t`,
+  `__STDCPP_DEFAULT_NEW_ALIGNMENT__`, aligned SSE accesses). Fix in
+  `sys/src/ape/lib/ap/plan9/malloc.c` (16 stride, `sbrk16`).
+- **amd64 build directories**: the old symlinks `build/amd64/* -> ../*` (layout before 386) made
+  `build/amd64/cross` a symlink to `build/cross`; a newly configured gcc with prefix
+  `build/amd64/cross` found itself in `build/cross/bin` and thought it had been moved → `incpath.cc`
+  then puts everything under `lib/gcc/…` first, gcc's `stddef.h` before APE's (error
+  `max_align_t`). amd64 is now rebuilt in real directories like 386.
+- Tests: `tests/c99math.c` (`-frounding-math`: otherwise gcc moves `rint` across `fesetround`),
+  `c99stdio.c`, `c99time.c`, `c99wchar.c`, `pthread.c`, `cxxlib.cc` (in `cross.sh`; `cxxlib` also
+  native). Test traps: gcc folds `rint(-x)` to `-rint(x)`; on 386 gcc inlines `sqrtf` as
+  `fsqrt` with excess precision; glibc's „C“ locale is not UTF-8 (host test: `C.UTF-8`).
+- Open: APE's stdio has no locks (threads sharing a FILE must coordinate;
+  `std::cout` from several threads); `_exit`/abort do not end other threads; no locales
+  other than „C“; `<uchar.h>` is missing.
 
-## riscv64: riscv64-unknown-plan9 (Branch riscv, Tree `../9front-riscv`)
+## riscv64: riscv64-unknown-plan9 (branch riscv, tree `../9front-riscv`)
 
-- **gcc-Target aufgeteilt wie bei anderen Systemen:** `gcc/config/plan9.h` hat das System
-  (Include-Pfade, Feature-Makros, Bibliotheken, crtbegin/crtend, `--wrap=main`, gnu17,
-  `SYSTEM_IMPLICIT_EXTERN_C`), `i386/plan9.h` bzw. `riscv/plan9.h` die Maschine
+- **gcc target split as on other systems:** `gcc/config/plan9.h` has the system
+  (include paths, feature macros, libraries, crtbegin/crtend, `--wrap=main`, gnu17,
+  `SYSTEM_IMPLICIT_EXTERN_C`), `i386/plan9.h` resp. `riscv/plan9.h` the machine
   (`PLAN9_OBJTYPE`, `PLAN9_CC1_SPEC`, `PLAN9_LINK_SPEC`; x86: `.note.gnu.property`).
-  libgcc: `config/plan9-main.c` und `config/t-plan9` gemeinsam, `i386/t-plan9` nur noch die
-  Unwinder-Ausrichtung. **Für x86 ohne Wirkung:** amd64 und 386 neu gebaut, `-dumpspecs`,
-  C- und C++-Makros, `ape.o`/`eh.o` byte-gleich mit vorher; `tests/cross.sh` 10/10 je.
-  Falle: nach geänderter `config.host` konfiguriert `build.sh` libgcc nicht neu (nur bei
-  anderen configure-Argumenten) → `build/$objtype/cross-gcc/$TARGET/libgcc` löschen.
-- **riscv64-Target:** `config.gcc` `riscv*-*-plan9*` (`elfos.h glibc-stdint.h … riscv/plan9.h
-  plan9.h`, `riscv/t-riscv`, Unwind-Tabellen per Default wie riscv64-linux-gnu); configure
-  `--with-arch=rv64gc --with-abi=lp64d --with-cmodel=medany` wie `riscv64/cflags.json`.
-  `-mno-relax`/`--no-relax` per Default: niemand setzt gp (`__global_pointer$`) — weder
-  9fronts `_main` noch der Kernel, jc nimmt das Register als SB. `char` vorzeichenbehaftet
-  (`DEFAULT_SIGNED_CHAR`, wie jc und `-fsigned-char` im Tree). libgcc wie `riscv*-*-*`
-  (softfp, save-restore) mit crtbegin/crtend. binutils: nichts (die generischen
-  `riscv64*-*-*`-Einträge in config.bfd, ld, gas greifen).
-- compat: `fenv.h` mit fcsr-Werten (musls riscv64 bits), `pthread.c` `rfork`/`runon` in
-  riscv64-Assembler (Nummer und Ergebnis in s0, Argument bei 8(sp), `ecall`; das Kind erbt
-  alle Register außer s0: privtop/t in s1/s2). `string.h` deklariert `strtok_r` (libap hat es,
-  APE nur unter `_REENTRANT_SOURCE` — das brächte APEs Nicht-POSIX-`strerror_r`; gas'
-  `tc-riscv.c` braucht es). gccmk: `lib.rc` kennt riscv64 (O=j); `tests/mk.sh` nimmt das
-  `objcopy` der Cross-Toolchain (das des Hosts kennt riscv64 nicht), vergleicht memmove,
-  strcmp, setjmp; libmp/libsec haben für riscv64 keinen Assembler (mpsec entfällt).
-- Tree (`../9front-riscv`): `riscv64/plan9.ld` sammelt `.init_array` und
-  `.gcc_except_table` wie amd64 (C-Programme linken byte-gleich).
-- **`long double` ist IEEE quad** (128 Bit, Software über libgcc). Tests hatten x87-Werte
-  fest (`%.18Lf` von π, LDBL_MAX-Zeichenkette) → je nach `LDBL_MANT_DIG`. **musl hat für quad
-  kein echtes `expl`, `logl`, `log1pl`** (`TODO: broken implementation to make things
-  compile`, sie rufen die double-Funktion; `atanhl` darüber) — wie bei musl auf riscv64-Linux;
-  `c99math` prüft dort double-Genauigkeit. Offen.
-- Gates: `tests/cross.sh` 10/10, `tests/native.sh` 7/7 (gcc/g++ auf 9front riscv64, Objekte
-  byte-gleich mit dem Cross-Compiler), `tests/mk.sh` 5/5 (riscv64-Gast unter TCG: `MEM=2048
-  CMDWAIT=1800`). Tree mit `TOOLPREFIX=riscv64-unknown-plan9-` gebaut: 817 files ok,
-  **5811 von 5830 Objekten byte-gleich** mit dem Linux-Cross-Build (riscv64-linux-gnu-gcc
-  16.2.1); die 19 anderen: cwfs `conf.o`/`.r.o` (`-DDATE=$(date +%s)`), `virt.o` (bettet
-  bootfs.paq mit Compiler-Version und Zeitstempeln ein).
-- `/riscv64/gnu` 194 MB. Offen: Selbstbau des Trees im riscv64-Gast (unter TCG sehr lang),
-  keine riscv64-ISO.
+  libgcc: `config/plan9-main.c` and `config/t-plan9` shared, `i386/t-plan9` only the
+  unwinder alignment now. **No effect for x86:** amd64 and 386 rebuilt, `-dumpspecs`,
+  C and C++ macros, `ape.o`/`eh.o` byte-identical with before; `tests/cross.sh` 10/10 each.
+  Trap: after a changed `config.host` `build.sh` does not reconfigure libgcc (only with
+  different configure arguments) → delete `build/$objtype/cross-gcc/$TARGET/libgcc`.
+- **riscv64 target:** `config.gcc` `riscv*-*-plan9*` (`elfos.h glibc-stdint.h … riscv/plan9.h
+  plan9.h`, `riscv/t-riscv`, unwind tables by default like riscv64-linux-gnu); configure
+  `--with-arch=rv64gc --with-abi=lp64d --with-cmodel=medany` like `riscv64/cflags.json`.
+  `-mno-relax`/`--no-relax` by default: nobody sets gp (`__global_pointer$`) — neither
+  9front's `_main` nor the kernel, jc takes the register as SB. `char` signed
+  (`DEFAULT_SIGNED_CHAR`, like jc and `-fsigned-char` in the tree). libgcc like `riscv*-*-*`
+  (softfp, save-restore) with crtbegin/crtend. binutils: nothing (the generic
+  `riscv64*-*-*` entries in config.bfd, ld, gas apply).
+- compat: `fenv.h` with fcsr values (musl's riscv64 bits), `pthread.c` `rfork`/`runon` in
+  riscv64 assembler (number and result in s0, argument at 8(sp), `ecall`; the child inherits
+  all registers except s0: privtop/t in s1/s2). `string.h` declares `strtok_r` (libap has it,
+  APE only under `_REENTRANT_SOURCE` — which would bring APE's non-POSIX `strerror_r`; gas'
+  `tc-riscv.c` needs it). gccmk: `lib.rc` knows riscv64 (O=j); `tests/mk.sh` takes the
+  `objcopy` of the cross toolchain (the host's does not know riscv64), compares memmove,
+  strcmp, setjmp; libmp/libsec have no assembler for riscv64 (mpsec dropped).
+- Tree (`../9front-riscv`): `riscv64/plan9.ld` collects `.init_array` and
+  `.gcc_except_table` like amd64 (C programs link byte-identically).
+- **`long double` is IEEE quad** (128 bits, software via libgcc). Tests had x87 values
+  hard-coded (`%.18Lf` of π, LDBL_MAX string) → now depending on `LDBL_MANT_DIG`. **musl has no
+  real `expl`, `logl`, `log1pl` for quad** (`TODO: broken implementation to make things
+  compile`, they call the double function; `atanhl` on top of that) — as with musl on riscv64 Linux;
+  `c99math` checks double precision there. Open.
+- Gates: `tests/cross.sh` 10/10, `tests/native.sh` 7/7 (gcc/g++ on 9front riscv64, objects
+  byte-identical with the cross compiler), `tests/mk.sh` 5/5 (riscv64 guest under TCG: `MEM=2048
+  CMDWAIT=1800`). Tree built with `TOOLPREFIX=riscv64-unknown-plan9-`: 817 files ok,
+  **5811 of 5830 objects byte-identical** with the Linux cross build (riscv64-linux-gnu-gcc
+  16.2.1); the 19 others: cwfs `conf.o`/`.r.o` (`-DDATE=$(date +%s)`), `virt.o` (embeds
+  bootfs.paq with compiler version and timestamps).
+- `/riscv64/gnu` 194 MB. Open: self-build of the tree in the riscv64 guest (very long under TCG),
+  no riscv64 ISO.
 
-## arm64: aarch64-pc-plan9 (2026-10-31, für 9front-rust)
+## arm64: aarch64-pc-plan9 (2026-10-31, for 9front-rust)
 
-- binutils: `aarch64-*-plan9*` in config.bfd, gas/configure.tgt, ld/configure.tgt (die
-  ELF-Einträge, Emulation aarch64elf).
+- binutils: `aarch64-*-plan9*` in config.bfd, gas/configure.tgt, ld/configure.tgt (the
+  ELF entries, emulation aarch64elf).
 - gcc: `config.gcc` `aarch64*-*-plan9*` (`elfos.h glibc-stdint.h aarch64-elf.h aarch64-errata.h
-  aarch64/plan9.h plan9.h`, `aarch64/t-aarch64`, Unwind-Tabellen per Default wie
-  aarch64-linux-gnu). `aarch64/plan9.h`: `PLAN9_OBJTYPE "arm64"`, `char` vorzeichenbehaftet
-  (7c, `-fsigned-char` des Trees), `-mno-outline-atomics` per Default (deren Helfer wählen LSE
-  über getauxval, das Plan 9 nicht hat; der Tree baut so). libgcc: aarch64-t-aarch64, softfp
-  (`long double` ist quad), crtfm, **`aarch64/t-crtstuff`** (neu, wie riscv: crt*.o ohne
-  Unwind-Tabellen, sonst zeigt `__EH_FRAME_BEGIN__` auf crtbegins eigene .eh_frame und der
-  Unwinder findet die des Programms nicht: C++-Exceptions endeten in terminate), kein t-lse.
-  `build.sh`/Tests: `objtype=arm64`, gccmk O=7.
-- Tree (gcc-Branch): `arm64/plan9.ld` sammelt `.init_array` und `.gcc_except_table` wie amd64
-  (ohne lief `frame_dummy` nie); C-Programme bleiben byte-gleich. `/sys/include/ape/fenv.h` hatte
-  für arm64 die x87-Werte (FE_UPWARD 0x800 statt fpcrs 0x400000): fesetround wies die
-  Rundungsmodi ab.
-- `tests/cross.sh` arm64 10/10 (Gast unter TCG, ein Prozessor).
-- **nativ** (`build.sh hostlibs native plan9`, `/arm64/gnu` 148 MB): gcc auf einem aarch64-Host
-  bindet `host_detect_local_cpu` ein (`-mcpu=native`), `driver-aarch64.o` aber nur für bekannte
-  Hosts: `gcc/config.host` nimmt `aarch64*-*-plan9*` dazu (es liest `/proc/cpuinfo`; fehlt die,
-  erkennt `-mcpu=native` nichts). Linker für rustc auf 9front arm64 (9front-rust).
+  aarch64/plan9.h plan9.h`, `aarch64/t-aarch64`, unwind tables by default like
+  aarch64-linux-gnu). `aarch64/plan9.h`: `PLAN9_OBJTYPE "arm64"`, `char` signed
+  (7c, the tree's `-fsigned-char`), `-mno-outline-atomics` by default (their helpers choose LSE
+  via getauxval, which Plan 9 does not have; the tree builds this way). libgcc: aarch64-t-aarch64, softfp
+  (`long double` is quad), crtfm, **`aarch64/t-crtstuff`** (new, like riscv: crt*.o without
+  unwind tables, otherwise `__EH_FRAME_BEGIN__` points to crtbegin's own .eh_frame and the
+  unwinder does not find the program's: C++ exceptions ended in terminate), no t-lse.
+  `build.sh`/tests: `objtype=arm64`, gccmk O=7.
+- Tree (gcc branch): `arm64/plan9.ld` collects `.init_array` and `.gcc_except_table` like amd64
+  (without it `frame_dummy` never ran); C programs stay byte-identical. `/sys/include/ape/fenv.h` had
+  the x87 values for arm64 (FE_UPWARD 0x800 instead of fpcrs 0x400000): fesetround rejected the
+  rounding modes.
+- `tests/cross.sh` arm64 10/10 (guest under TCG, one processor).
+- **native** (`build.sh hostlibs native plan9`, `/arm64/gnu` 148 MB): gcc on an aarch64 host
+  includes `host_detect_local_cpu` (`-mcpu=native`), but `driver-aarch64.o` only for known
+  hosts: `gcc/config.host` adds `aarch64*-*-plan9*` (it reads `/proc/cpuinfo`; if that is missing,
+  `-mcpu=native` detects nothing). Linker for rustc on 9front arm64 (9front-rust).
 
-## Lücken aus dem Mesa-Port (Branch `gpu` des Trees, „9front next generation“)
+## Gaps from the Mesa port (branch `gpu` of the tree, „9front next generation“)
 
-Beim Cross-Build von Mesas venus (`../9front`, Branch `gpu`, `scripts/mesa`) fielen
-Lücken auf, die bisher im Mesa-Build umgangen wurden. Behoben an der Wurzel; im Tree
-darf auf dem Branch `gpu` 9front-Code geändert werden.
-- **`-pthread`**: Die Specs schluckten es (`%{pthread:}`), der Treiber kannte die Option
-  aber nicht („unrecognized command-line option“). `config/plan9.opt` (`pthread` als
-  `Driver`-Option, dazu `plan9.opt.urls`, die GCC 16 verlangt), `config.gcc`
-  `extra_options` für `*-*-plan9*`.
-- **Link-Reihenfolge**: `LIB_SPEC` legt `-lapecompat -lbsd -lap` in eine Gruppe
-  (`--start-group`): libap ruft libbsd (mkstemp → mktemp) und umgekehrt; unter 9front
-  löst `#pragma lib` das ohne Reihenfolge.
-- **compat**: `readlink`/`symlink` nur noch, wenn APE sie nicht POSIX-gerecht deklariert
-  (APEs `unistd.h` definiert dann `__APE_POSIX_LINKS`; libbsds sind dann POSIX'
-  Signaturen). `sysconf(_SC_PHYS_PAGES)` aus `/dev/swap`. pthread-Barrieren
-  (`pthread_barrier_*`), `pthread_sigmask` (APEs `sigprocmask`), `pthread_getcpuclockid`
-  (ENOENT: keine CPU-Zeit-Uhren).
-- Tree (Branch `gpu`), APE: `int8_t` ist `signed char` (gcc: `char*` und `signed char*`
-  sind verschiedene Typen; gccs eigenes `__INT8_TYPE__` ist ohnehin `signed char`);
-  `posix_memalign`, `aligned_alloc`, `memalign` in `malloc.c` (der ausgerichtete Block
-  liegt in einem von malloc, davor ein Kopf mit Magic `ALIGNED`, dem `free`/`realloc`
-  folgen) — vorher meldete meson `posix_memalign` als vorhanden (gcc kennt das Builtin),
-  APE hatte es nicht; `mkstemp`/`mkstemps` ohne libbsds `mktemp`, unter `_POSIX_SOURCE`
-  deklariert; POSIX-`lstat`, `symlink`, `readlink` (libbsd); `static_assert` (C11) in
-  `assert.h`; `SIGSYS`; `setenv`/`unsetenv`; `localtime_r` & Co. unter `_POSIX_SOURCE`;
-  `putenv` schrieb einen Eintrag hinter das vergrößerte `environ` (n+1 statt n+2).
+When cross-building Mesa's venus (`../9front`, branch `gpu`, `scripts/mesa`), gaps showed up
+that had so far been worked around in the Mesa build. Fixed at the root; in the tree
+9front code may be changed on branch `gpu`.
+- **`-pthread`**: The specs swallowed it (`%{pthread:}`), but the driver did not know the option
+  („unrecognized command-line option“). `config/plan9.opt` (`pthread` as
+  `Driver` option, plus `plan9.opt.urls`, which GCC 16 requires), `config.gcc`
+  `extra_options` for `*-*-plan9*`.
+- **Link order**: `LIB_SPEC` puts `-lapecompat -lbsd -lap` into a group
+  (`--start-group`): libap calls libbsd (mkstemp → mktemp) and vice versa; under 9front
+  `#pragma lib` resolves this without order.
+- **compat**: `readlink`/`symlink` only if APE does not declare them POSIX-conformantly
+  (APE's `unistd.h` then defines `__APE_POSIX_LINKS`; libbsd's are then POSIX
+  signatures). `sysconf(_SC_PHYS_PAGES)` from `/dev/swap`. pthread barriers
+  (`pthread_barrier_*`), `pthread_sigmask` (APE's `sigprocmask`), `pthread_getcpuclockid`
+  (ENOENT: no CPU-time clocks).
+- Tree (branch `gpu`), APE: `int8_t` is `signed char` (gcc: `char*` and `signed char*`
+  are different types; gcc's own `__INT8_TYPE__` is `signed char` anyway);
+  `posix_memalign`, `aligned_alloc`, `memalign` in `malloc.c` (the aligned block
+  lies inside one from malloc, in front of it a header with magic `ALIGNED`, which `free`/`realloc`
+  follow) — before, meson reported `posix_memalign` as present (gcc knows the builtin),
+  APE did not have it; `mkstemp`/`mkstemps` without libbsd's `mktemp`, declared under `_POSIX_SOURCE`;
+  POSIX `lstat`, `symlink`, `readlink` (libbsd); `static_assert` (C11) in
+  `assert.h`; `SIGSYS`; `setenv`/`unsetenv`; `localtime_r` & co. under `_POSIX_SOURCE`;
+  `putenv` wrote an entry behind the enlarged `environ` (n+1 instead of n+2).
 
 ## compat in APE (2026-10-29)
 
-compat (`compat/`, `libapecompat.a`, musl als Quelle) ist in den 9front-Baum gewandert
-(Branch `gcc`): APEs Header haben die gcc-Teile unter `#if defined(__GNUC__)`, die
-Funktionen liegen in `sys/src/ape/lib/ap/gnu`, musls Teilmenge in `sys/src/ape/lib/musl`,
-alles in `libap.a`. Der Treiber linkt `--start-group -lbsd -lap --end-group`, kein
-Tool-Include-Verzeichnis mehr; `build.sh compat` und musl in `sources.txt` sind weg.
-Braucht einen Baum mit diesem APE (`PLAN9`; `gpu` muss `gcc` mergen, `../9front-riscv`
-ebenso). `tests/cross.sh` amd64 gegen den gcc-Worktree: alle 10 grün.
+compat (`compat/`, `libapecompat.a`, musl as source) has moved into the 9front tree
+(branch `gcc`): APE's headers have the gcc parts under `#if defined(__GNUC__)`, the
+functions are in `sys/src/ape/lib/ap/gnu`, musl's subset in `sys/src/ape/lib/musl`,
+all in `libap.a`. The driver links `--start-group -lbsd -lap --end-group`, no
+tool include directory any more; `build.sh compat` and musl in `sources.txt` are gone.
+Needs a tree with this APE (`PLAN9`; `gpu` must merge `gcc`, `../9front-riscv`
+likewise). `tests/cross.sh` amd64 against the gcc worktree: all 10 green.
 
-## 386: intptr_t wie size_t (2026-10-30)
+## 386: intptr_t like size_t (2026-10-30)
 
-i686-pc-plan9 hatte `size_t`/`ptrdiff_t` `(unsigned) long` (gccs Standard, wie Plan 9s
-`usize`), aber `intptr_t`/`uintptr_t` `(unsigned) int` (glibc-stdint.h für 32 Bit): zwei
-Typen gleicher Größe, gcc 14 lehnt einen `uintptr_t *` für einen `size_t *` ab (curls
-`rustls.c` gegen rustls-ffi, beim Bau von cargo für 386 in 9front-rust). `i386/plan9-386.h`:
-`INTPTR_TYPE`/`UINTPTR_TYPE` `long`, wie size_t und u.h's `uintptr`; keine ABI-Änderung.
-APEs `inttypes.h` (Branch gcc) gibt PRI*PTR dafür `l` (unter `__plan9__`). Toolchain im
-eigenen Bauverzeichnis (`BUILD=build-gcc`, gegen ../9front-gccwt); `tests/cross.sh` 386: 10/10.
+i686-pc-plan9 had `size_t`/`ptrdiff_t` `(unsigned) long` (gcc's default, like Plan 9's
+`usize`), but `intptr_t`/`uintptr_t` `(unsigned) int` (glibc-stdint.h for 32 bits): two
+types of equal size, gcc 14 rejects a `uintptr_t *` for a `size_t *` (curl's
+`rustls.c` against rustls-ffi, when building cargo for 386 in 9front-rust). `i386/plan9-386.h`:
+`INTPTR_TYPE`/`UINTPTR_TYPE` `long`, like size_t and u.h's `uintptr`; no ABI change.
+APE's `inttypes.h` (branch gcc) gives PRI*PTR an `l` for it (under `__plan9__`). Toolchain in
+its own build directory (`BUILD=build-gcc`, against ../9front-gccwt); `tests/cross.sh` 386: 10/10.
 
 ## Threads: GTHREAD_USE_WEAK 0 (2026-10-30)
 
-libgccs gthr-posix prüft über einen schwachen Verweis auf `pthread_cancel`, ob ein Programm
-Threads hat (`__gthread_active_p`). Ein schwacher Verweis zieht aber kein Objekt aus
-`libap.a`: in einem Rust-Programm (eigene rfork-Procs, kein APE-pthread) war er 0, die
-Mutexe des Unwinders (FDE-Listen, unwind-dw2-fde) taten nichts. Gleichzeitige Panics in
-mehreren Threads (Rusts std-Tests mit 12 Test-Threads) brachen Phase 2 ab (`abort`), das
-Programm hing. `gcc/config/plan9.h`: `GTHREAD_USE_WEAK 0` wie darwin.h und cygwin.h; APEs
-pthreads sind fester Teil von libap, ihre Mutexe gehen für jeden Proc (`pthread_self` kennt
-std's Procs). libstdc++ (`config/os/generic`) hatte `_GLIBCXX_GTHREAD_USE_WEAK 0` schon.
+libgcc's gthr-posix checks via a weak reference to `pthread_cancel` whether a program
+has threads (`__gthread_active_p`). A weak reference does not pull an object out of
+`libap.a`, though: in a Rust program (own rfork procs, no APE pthread) it was 0, the
+unwinder's mutexes (FDE lists, unwind-dw2-fde) did nothing. Concurrent panics in
+several threads (Rust's std tests with 12 test threads) aborted phase 2 (`abort`), the
+program hung. `gcc/config/plan9.h`: `GTHREAD_USE_WEAK 0` like darwin.h and cygwin.h; APE's
+pthreads are a fixed part of libap, their mutexes work for every proc (`pthread_self` knows
+std's procs). libstdc++ (`config/os/generic`) already had `_GLIBCXX_GTHREAD_USE_WEAK 0`.
