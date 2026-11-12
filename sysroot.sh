@@ -7,7 +7,8 @@
 # usage: sysroot.sh dir
 set -e
 TOP=$(cd "$(dirname "$0")" && pwd)
-PLAN9=${PLAN9:-$(cd "$TOP/../9front" && pwd)}
+. "$TOP/scripts/nfront-paths.sh"	# TREE, TREE_GCC, GCC_DIR, ... (the distribution's paths.env)
+PLAN9=${PLAN9:-$(cd "$TREE" && pwd)}
 objtype=${objtype:-amd64}
 OUT=${1:?usage: sysroot.sh dir}
 for f in $objtype/include sys/include $objtype/lib.gcc/ape/libap.a $objtype/lib.gcc/libc.a $objtype/plan9.ld; do
