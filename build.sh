@@ -23,7 +23,11 @@ amd64)	TARGET=x86_64-pc-plan9 ARCHCONF=() ;;
 # the tree's riscv64 code (riscv64/cflags.json)
 riscv64)	TARGET=riscv64-unknown-plan9
 	ARCHCONF=(--with-arch=rv64gc --with-abi=lp64d --with-cmodel=medany)
-	[ -n "$PLAN9" ] || [ ! -d "$TREE_RISCV" ] || PLAN9=$TREE_RISCV ;;
+	# the port is on the tree's branch riscv: its worktree (dist/bin/repos --worktrees=riscv)
+	if [ -z "$PLAN9" ]; then
+		[ -d "$TREE_RISCV" ] || { echo "build.sh: riscv64 needs the tree's branch riscv in $TREE_RISCV: dist/bin/repos --worktrees=riscv (or PLAN9=its tree)" >&2; exit 1; }
+		PLAN9=$TREE_RISCV
+	fi ;;
 # the tree's arm64 code (arm64/cflags.json: armv8-a, signed char, no outline atomics)
 arm64)	TARGET=aarch64-pc-plan9 ARCHCONF=() ;;
 *)	echo "build.sh: objtype=$objtype: no target" >&2; exit 1 ;;
